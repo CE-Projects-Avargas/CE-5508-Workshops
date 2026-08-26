@@ -65,6 +65,8 @@ curl -X POST http://localhost:4000/proyectos \
 
 O abre http://localhost:5173 y usa el formulario "Nuevo Proyecto".
 
+Para explorar la base de datos directamente (entrar al cliente de MySQL dentro del contenedor, ver tablas, correr `SELECT`, etc.), consulta [`database/Comandos_MySQL_MariaDB.pdf`](database/Comandos_MySQL_MariaDB.pdf).
+
 ## Cómo probar lo que vas a construir
 
 ```bash
