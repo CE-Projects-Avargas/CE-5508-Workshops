@@ -68,7 +68,7 @@ O abre http://localhost:5173 y usa el formulario "Nuevo Proyecto".
 Para explorar la base de datos directamente:
 
 ```bash
-docker compose exec mariadb mysql -u root -p
+docker compose exec mariadb mariadb -u root -p
 # password: root123
 MariaDB [(none)]> USE dispositivos_medicos;
 MariaDB [dispositivos_medicos]> SHOW TABLES;
