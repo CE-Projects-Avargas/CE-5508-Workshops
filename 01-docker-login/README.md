@@ -65,7 +65,15 @@ curl -X POST http://localhost:4000/proyectos \
 
 O abre http://localhost:5173 y usa el formulario "Nuevo Proyecto".
 
-Para explorar la base de datos directamente (entrar al cliente de MySQL dentro del contenedor, ver tablas, correr `SELECT`, etc.), consulta [`database/Comandos_MySQL_MariaDB.pdf`](database/Comandos_MySQL_MariaDB.pdf).
+Para explorar la base de datos directamente:
+
+```bash
+docker compose exec mariadb mysql -u root -p
+# password: root123
+MariaDB [(none)]> USE dispositivos_medicos;
+MariaDB [dispositivos_medicos]> SHOW TABLES;
+MariaDB [dispositivos_medicos]> SELECT * FROM Proyectos;
+```
 
 ## Cómo probar lo que vas a construir
 
