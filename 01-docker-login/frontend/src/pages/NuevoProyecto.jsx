@@ -7,8 +7,7 @@ const ESTADO_INICIAL = {
 };
 
 // Esta pantalla ya funciona completo — es tu ejemplo de referencia
-// de cómo el frontend consume el backend con fetch. El patrón para
-// /auth/login en Login.jsx es el mismo: fetch + manejo de respuesta.
+// de cómo el frontend consume el backend con fetch.
 export default function NuevoProyecto() {
   const [form, setForm] = useState(ESTADO_INICIAL);
   const [proyectos, setProyectos] = useState([]);

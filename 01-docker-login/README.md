@@ -82,7 +82,7 @@ MariaDB [dispositivos_medicos]> SELECT * FROM Usuarios;
 ├── auth-service/        vacía — el reto de hoy
 ├── frontend/
 │   └── src/
-│       ├── pages/       NuevoProyecto.jsx (funciona), Login.jsx (pantalla base)
+│       ├── pages/       NuevoProyecto.jsx (funciona)
 │       └── api.js
 └── database/
     └── init/             scripts SQL que MariaDB ejecuta al primer arranque

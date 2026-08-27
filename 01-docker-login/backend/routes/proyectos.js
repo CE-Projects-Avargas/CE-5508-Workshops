@@ -2,9 +2,6 @@ const express = require('express');
 const router = express.Router();
 const Proyecto = require('../models/Proyecto');
 
-// Este archivo ya funciona completo — úsalo como referencia del patrón
-// que vas a repetir en auth.js para /auth/register y /auth/login.
-
 // GET /proyectos - lista todos los proyectos
 router.get('/', async (req, res) => {
   try {
