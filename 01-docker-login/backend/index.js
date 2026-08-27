@@ -12,7 +12,6 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller Docker + Login' });
 });
 
-app.use('/auth', require('./routes/auth'));
 app.use('/proyectos', require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;

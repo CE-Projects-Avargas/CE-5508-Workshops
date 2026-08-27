@@ -17,7 +17,3 @@ export async function listarProyectos() {
   if (!res.ok) throw new Error(body.error || 'Error al listar proyectos');
   return body;
 }
-
-// TALLER: agrega aquí las funciones que necesites para consumir
-// /auth/register y /auth/login una vez que existan en el backend.
-// Sigue el mismo patrón que crearProyecto() de arriba.

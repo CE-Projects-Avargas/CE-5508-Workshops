@@ -25,7 +25,6 @@ services:
       DB_NAME: dispositivos_medicos
       DB_USER: root
       DB_PASSWORD: root123
-      JWT_SECRET: cambia-este-secreto-en-produccion
       PORT: 4000
     ports:
       - "4000:4000"
