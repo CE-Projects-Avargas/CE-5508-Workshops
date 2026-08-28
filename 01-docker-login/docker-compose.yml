@@ -35,6 +35,25 @@ services:
       - ./backend:/app
       - /app/node_modules
 
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: dispositivos_medicos
+      DB_USER: root
+      DB_PASSWORD: root123
+      PORT: 5000
+    ports:
+      - "5001:5000"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - ./auth-service:/app
+      - /app/node_modules
+
   frontend:
     build: ./frontend
     restart: unless-stopped
