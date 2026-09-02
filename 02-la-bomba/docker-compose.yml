@@ -1,0 +1,71 @@
+# CE5508 · Taller 2 — La bomba y la colaboración entre servicios
+#
+# Traigan del Taller 1 sus carpetas backend/, frontend/ y auth-service/
+# y colóquenlas junto a este archivo. Todo lo demás ya está listo.
+
+services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: dispositivos_medicos
+    ports: ["3306:3306"]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:                       # del Taller 1 — se le agrega el filtro por dueño
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      JWT_SECRET: secreto-compartido-del-taller
+      PORT: 4000
+    ports: ["4000:4000"]
+    depends_on:
+      mariadb: { condition: service_healthy }
+
+  auth-service:                  # del Taller 1 — sin cambios
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      JWT_SECRET: secreto-compartido-del-taller
+      PORT: 4001
+    ports: ["4001:4001"]
+    depends_on:
+      mariadb: { condition: service_healthy }
+
+  pump-service:                  # NUEVO — el reto de este taller
+    build: ./pump-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: mariadb
+      BACKEND_URL: http://backend:4000
+      JWT_SECRET: secreto-compartido-del-taller
+      PORT: 4002
+    ports: ["4002:4002"]
+    depends_on:
+      mariadb: { condition: service_healthy }
+    volumes:
+      - ./pump-service:/app
+      - /app/node_modules
+
+  frontend:                      # del Taller 1 — se le agrega la consola
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:4000
+      VITE_AUTH_URL: http://localhost:4001
+      VITE_PUMP_URL: http://localhost:4002
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  mariadb_data:
