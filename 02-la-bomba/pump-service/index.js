@@ -14,6 +14,7 @@ app.get('/', (req, res) =>
   res.json({ status: 'ok', servicio: 'pump-service', taller: 2 }));
 
 app.use('/bombas', require('./routes/bombas'));
+app.use('/productos', require('./routes/productos'));   // catálogo, ya resuelto
 
 const PORT = process.env.PORT || 4002;
 
