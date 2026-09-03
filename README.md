@@ -4,6 +4,11 @@ Repositorio de talleres prácticos del curso CE5508 (Arquitectura Orientada a Se
 
 Cada carpeta es un taller independiente: trae su propio `README.md` con instrucciones, una base de código funcional (o parcialmente funcional, con TODOs) y, cuando aplica, un `docker-compose.yml` para levantar todo con un solo comando.
 
+## Integrantes
+- Kevin Carranza Blanco
+- José Manuel Loría Cordero
+- Andres Molina Redondo
+
 ## Talleres
 
 | Carpeta | Tema |
