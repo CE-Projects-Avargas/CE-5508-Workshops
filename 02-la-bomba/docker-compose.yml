@@ -1,10 +1,23 @@
 # CE5508 · Taller 2 — La bomba y la colaboración entre servicios
 #
 # Traigan del Taller 1 sus carpetas backend/, frontend/ y auth-service/
-# y colóquenlas junto a este archivo. Todo lo demás ya está listo.
+# y colóquenlas junto a este archivo.
+#
+# ─────────────────────────────────────────────────────────────
+# DOS BASES DE DATOS, y no es un detalle:
+#
+#   auth-db        solo credenciales. Nadie más la toca.
+#   operacion-db   el dominio del negocio.
+#
+# Ningún servicio se conecta como root: cada uno tiene su propio
+# usuario con permisos mínimos. Ver database/operacion/03-permisos.sql
+# ─────────────────────────────────────────────────────────────
 
 services:
-  gateway:                       # ÚNICO punto de entrada del sistema
+
+  # ═══════════════ ENTRADA ═══════════════
+
+  gateway:                       # único punto de entrada del sistema
     image: nginx:alpine          # BSD-2 · imagen oficial
     restart: unless-stopped
     ports: ["8080:8080"]
@@ -12,35 +25,45 @@ services:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
     depends_on: [backend, pump-service]   # auth-service lo agregan ustedes
+    networks: [borde, interna]
 
-  mariadb:
+  # ═══════════════ DATOS ═══════════════
+
+  auth-db:                       # credenciales — aislada del resto
     image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: dispositivos_medicos
-    ports: ["3306:3306"]
+      MARIADB_ROOT_PASSWORD: root123
     volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d
+      - auth_data:/var/lib/mysql
+      - ./database/auth:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks: [datos-auth]
+    # Sin 'ports': no se expone al anfitrión.
+    # Para inspeccionarla:  docker compose exec auth-db mariadb -u root -p
 
-  backend:                       # del Taller 1 — se le agrega el filtro por dueño
-    build: ./backend
+  operacion-db:                  # dominio del negocio
+    image: mariadb:11
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
-      JWT_SECRET: secreto-compartido-del-taller
-      PORT: 4000
-    ports: ["4000:4000"]
-    depends_on:
-      mariadb: { condition: service_healthy }
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - operacion_data:/var/lib/mysql
+      - ./database/operacion:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [datos-operacion]
 
-  # ═══════════════════════════════════════════════════════════
+  # ═══════════════ SERVICIOS ═══════════════
+
+  # ─────────────────────────────────────────────────────────────
   #  FALTA UN SERVICIO: el de autenticación. LO AGREGAN USTEDES.
   #
   #  Es el que construyeron en el Taller 1. Aquí no está declarado
@@ -48,41 +71,73 @@ services:
   #  que hay que saber hacer.
   #
   #  El gateway ya enruta /api/auth hacia  auth-service:4001
-  #  así que su bloque tiene que cumplir estas condiciones:
+  #  así que su bloque tiene que cumplir esto:
   #
-  #    · llamarse exactamente  auth-service   (es el nombre que
-  #      el gateway resuelve en la red de Docker)
+  #    · llamarse exactamente  auth-service
   #    · escuchar en el puerto 4001 dentro del contenedor
-  #    · usar el MISMO valor de JWT_SECRET que los demás
-  #      (si no, la firma que emite no la puede verificar nadie)
-  #    · esperar a que mariadb esté saludable antes de arrancar
+  #    · usar el MISMO JWT_SECRET que los demás
+  #    · conectarse a auth-db con el usuario auth_user / auth_pass
+  #      sobre la base 'autenticacion'  (NO como root)
+  #    · estar en las redes  interna  y  datos-auth
+  #    · esperar a que auth-db esté saludable
   #
-  #  Mientras no lo agreguen, /api/auth/login devuelve 502.
-  #  Ese error es la pista: el gateway busca un servicio que no existe.
-  # ═══════════════════════════════════════════════════════════
+  #  Mientras falte, /api/auth/login devuelve 502.
+  #  Ese error es la pista: el gateway busca algo que no existe.
+  # ─────────────────────────────────────────────────────────────
+
+  backend:                       # del Taller 1 — se le agrega el filtro por dueño
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_NAME: operacion
+      DB_USER: backend_user      # permisos solo sobre Proyectos
+      DB_PASSWORD: backend_pass
+      JWT_SECRET: secreto-compartido-del-taller
+      PORT: 4000
+    ports: ["4000:4000"]         # expuesto a propósito: ver el ejercicio del gateway
+    depends_on:
+      operacion-db: { condition: service_healthy }
+    networks: [interna, datos-operacion]
 
   pump-service:                  # NUEVO — el reto de este taller
     build: ./pump-service
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: operacion-db
+      DB_NAME: operacion
+      DB_USER: pump_user         # permisos solo sobre Bombas, Productos y Eventos
+      DB_PASSWORD: pump_pass
       BACKEND_URL: http://backend:4000
       JWT_SECRET: secreto-compartido-del-taller
       PORT: 4002
-    ports: ["4002:4002"]         # expuesto a propósito: ver §"saltarse el gateway"
+    ports: ["4002:4002"]
     depends_on:
-      mariadb: { condition: service_healthy }
+      operacion-db: { condition: service_healthy }
     volumes:
       - ./pump-service:/app
       - /app/node_modules
+    networks: [interna, datos-operacion]
 
   frontend:                      # del Taller 1 — se le agrega la consola
     build: ./frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:8080/api   # una sola URL
+      VITE_API_URL: http://localhost:8080/api   # una sola dirección
     ports: ["5173:5173"]
-    depends_on: [backend]
+    depends_on: [gateway]
+    networks: [borde]
+
+# ─────────────────────────────────────────────────────────────
+# Redes separadas: cada servicio solo alcanza lo que necesita.
+# pump-service NO puede llegar a auth-db aunque quisiera.
+# ─────────────────────────────────────────────────────────────
+networks:
+  borde:            # navegador ↔ gateway
+  interna:          # gateway ↔ servicios
+  datos-auth:       # solo auth-service ↔ auth-db
+  datos-operacion:  # backend y pump-service ↔ operacion-db
 
 volumes:
-  mariadb_data:
+  auth_data:
+  operacion_data:

@@ -12,7 +12,7 @@ Traigan del Taller 1 sus carpetas y colóquenlas junto a este archivo:
 ├── auth-service/   ← su Taller 1 (y hay que declararlo en el compose)
 ├── frontend/       ← su Taller 1
 ├── pump-service/   ← ya está aquí, con el esqueleto
-├── database/init/  ← ya está aquí, con las tablas nuevas
+├── database/       ← ya está aquí: auth/ y operacion/, separadas
 └── docker-compose.yml
 ```
 
@@ -22,12 +22,27 @@ Levantar:
 docker compose up --build
 ```
 
+## Dos bases de datos
+
+La base única del Taller 1 se parte en dos:
+
+| Base | Guarda | Por qué separada |
+|---|---|---|
+| `auth-db` | Solo `Usuarios` | **Contención de daño**: una inyección en otro servicio no debe leer hashes |
+| `operacion-db` | `Proyectos`, `Bombas`, `Productos`, `EventosControl` | El dominio. La comparten backend y pump-service |
+
+Ningún servicio se conecta como `root`: cada uno tiene su usuario con permisos mínimos (ver `database/operacion/03-permisos.sql`).
+
+**Lo que se pierde:** `Proyectos.ownerId` y `EventosControl.usuarioId` dejan de ser claves foráneas — el usuario vive en otra base. Esa garantía pasa a ser del código.
+
+**Redes separadas:** `pump-service` no tiene ruta hacia `auth-db`. La separación no depende de que nadie escriba la consulta equivocada.
+
 ## Qué ya está resuelto
 
 | | Qué hace |
 |---|---|
-| `database/init/03-t2-schema.sql` | Crea `Bombas`, `EventosControl` y agrega `ownerId` a `Proyectos` |
-| `database/init/04-t2-seed.sql` | Precarga **dos usuarios con proyectos distintos** y cinco bombas |
+| `database/auth/` | Base de credenciales, aislada, con su usuario y permisos |
+| `database/operacion/` | Dominio del negocio, precarga y **un usuario de BD por servicio** |
 | `pump-service/bucle.js` | El avance de las bombas: cada segundo entregan `caudalMlH / 3600` ml |
 | `pump-service/auth.js` | Verificación del token (autenticación) |
 | `docker-compose.yml` | Los servicios cableados — **menos `auth-service`, que agregan ustedes** |
