@@ -9,7 +9,7 @@ Traigan del Taller 1 sus carpetas y colóquenlas junto a este archivo:
 ```
 02-la-bomba/
 ├── backend/        ← su Taller 1
-├── auth-service/   ← su Taller 1
+├── auth-service/   ← su Taller 1 (y hay que declararlo en el compose)
 ├── frontend/       ← su Taller 1
 ├── pump-service/   ← ya está aquí, con el esqueleto
 ├── database/init/  ← ya está aquí, con las tablas nuevas
@@ -30,7 +30,7 @@ docker compose up --build
 | `database/init/04-t2-seed.sql` | Precarga **dos usuarios con proyectos distintos** y cinco bombas |
 | `pump-service/bucle.js` | El avance de las bombas: cada segundo entregan `caudalMlH / 3600` ml |
 | `pump-service/auth.js` | Verificación del token (autenticación) |
-| `docker-compose.yml` | Los cinco servicios cableados |
+| `docker-compose.yml` | Los servicios cableados — **menos `auth-service`, que agregan ustedes** |
 
 **Usuarios precargados** — contraseña `clave123` para ambos:
 
@@ -41,9 +41,10 @@ docker compose up --build
 
 ## Qué construyen ustedes
 
-1. **`pump-service/routes/bombas.js`** — los cinco endpoints, con autorización por propiedad. Los TODO están en el archivo.
-2. **`backend`** — que `GET /proyectos` devuelva solo los del usuario del token.
-3. **`frontend`** — la consola: proyectos, sus bombas, y los botones iniciar / pausar / detener.
+1. **Declarar `auth-service` en el `docker-compose.yml`.** No está ahí a propósito. El gateway ya enruta `/api/auth` hacia `auth-service:4001`, así que su bloque debe llamarse exactamente así, escuchar en el 4001 y usar el **mismo `JWT_SECRET`** que los demás. Mientras falte, `/api/auth/login` responde `502`.
+2. **`pump-service/routes/bombas.js`** — los nueve endpoints, con autorización por propiedad. Los TODO están en el archivo.
+3. **`backend`** — que `GET /proyectos` devuelva solo los del usuario del token.
+4. **`frontend`** — la consola: alta y edición de bombas con producto y cantidad, más iniciar / programar / pausar / detener.
 
 ## El reto
 
