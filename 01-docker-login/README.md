@@ -196,13 +196,20 @@ SELECT id, email, nombre FROM Usuarios;
 
 ## Variables de entorno
 
-`docker-compose.yml` ya define todo lo necesario para desarrollo local: no hace
-falta crear ningún `.env` a mano. Cada servicio trae un `.env.example` como
-referencia y para correrlo fuera de Docker.
+Los valores están escritos directamente en `docker-compose.yml`, así que
+`docker compose up --build` funciona en un clon limpio sin configurar nada.
 
-`JWT_SECRET` es la única variable que comparten dos servicios: el `auth-service`
-firma con ella y el `backend` verifica con ella, así que tiene que tener el
-mismo valor en ambos.
+`JWT_SECRET` es la variable que importa: el `auth-service` firma los tokens con
+ella y el `backend` los verifica con ella, así que tiene que ser idéntica en los
+dos servicios.
+
+Como está a la vista en el repositorio, sirve para desarrollo pero no para un
+despliegue real: quien la tenga puede fabricar tokens válidos para cualquier
+usuario. [`.env.example`](.env.example) documenta las variables y cómo sacarlas
+del repositorio cuando haga falta.
+
+Cada servicio trae además su propio `.env.example`, que sirve para correrlo
+fuera de Docker.
 
 ## Si el backend no arranca
 
