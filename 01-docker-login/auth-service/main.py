@@ -2,10 +2,22 @@ import os
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
 app = FastAPI(title="Auth Service")
+
+# Permite que el frontend (otro origen: localhost:5173) llame a este
+# servicio (localhost:8000). Sin esto el navegador bloquea las
+# peticiones fetch() por la politica de CORS.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # --------------------------------------------------

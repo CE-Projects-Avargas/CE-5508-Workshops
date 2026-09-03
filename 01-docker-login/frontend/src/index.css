@@ -128,3 +128,36 @@ code {
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
 }
+
+.enlace-secundario {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #93c5fd;
+  font-weight: 600;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: #bfdbfe;
+  background: none;
+}
+
+.barra-sesion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #334155;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
