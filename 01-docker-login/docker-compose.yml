@@ -26,7 +26,6 @@ services:
       DB_USER: root
       DB_PASSWORD: root123
       PORT: 4000
-      JWT_SECRET: dev-secret-ce5508-cambialo
     ports:
       - "4000:4000"
     depends_on:
@@ -36,37 +35,15 @@ services:
       - ./backend:/app
       - /app/node_modules
 
-  auth-service:
-    build: ./auth-service
-    restart: unless-stopped
-    environment:
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
-      DB_USER: root
-      DB_PASSWORD: root123
-      PORT: 5001
-      JWT_SECRET: dev-secret-ce5508-cambialo
-      JWT_EXPIRA_MIN: 60
-    ports:
-      - "5001:5001"
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    volumes:
-      - ./auth-service:/app
-
   frontend:
     build: ./frontend
     restart: unless-stopped
     environment:
       VITE_API_URL: http://localhost:4000
-      VITE_AUTH_URL: http://localhost:5001
     ports:
       - "5173:5173"
     depends_on:
       - backend
-      - auth-service
     volumes:
       - ./frontend:/app
       - /app/node_modules

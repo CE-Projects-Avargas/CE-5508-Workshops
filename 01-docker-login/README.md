@@ -7,16 +7,14 @@ Sistema de gestión de proyectos de dispositivos médicos de misión crítica: f
 ## Qué ya funciona
 
 - **Base de datos completa**: tablas `Usuarios` y `Proyectos` ya creadas (`database/init/01-schema.sql`), con datos de ejemplo (`02-seed.sql`).
-- **Backend — `GET /proyectos` y `POST /proyectos`**: funcionales y protegidos con un middleware que exige JWT (`backend/routes/proyectos.js`, `backend/middleware/auth.js`).
+- **Backend — `GET /proyectos` y `POST /proyectos`**: totalmente funcionales (`backend/routes/proyectos.js`).
 - **Frontend — pantalla "Nuevo Proyecto"**: formulario funcional que crea proyectos y lista los existentes (`frontend/src/pages/NuevoProyecto.jsx`).
 
-## El reto de hoy — resuelto
+## El reto de hoy
 
-`auth-service/` es un contenedor nuevo y separado del backend actual, hecho en **Python + Flask**, que habla con la misma base de datos MariaDB y resuelve el login: `POST /register`, `POST /login` (devuelve un **JWT**) y `GET /me` (valida el token) contra la tabla `Usuarios`, con contraseñas hasheadas. Detalles en [`auth-service/README.md`](auth-service/README.md).
+`auth-service/` está vacía. Ahí construyen, desde cero, un contenedor nuevo y separado del backend actual que hable con la misma base de datos MariaDB y resuelva el login: registrar un usuario y autenticarlo.
 
-El frontend arranca en la pantalla de **Iniciar sesión / Crear cuenta** (`frontend/src/pages/Login.jsx`), que consume el `auth-service` vía `VITE_AUTH_URL`. Tras autenticarse se guarda `{ token, usuario }` en `localStorage`; al recargar, `App.jsx` valida el JWT contra `/me` antes de mostrar la pantalla de proyectos y, si expiró, vuelve al login. Las llamadas a `/proyectos` mandan el token en `Authorization: Bearer`.
-
-El backend Node comparte el `JWT_SECRET` con el auth-service y monta `middleware/auth.js` sobre `/proyectos`: sin un JWT válido responde `401`. Si el frontend recibe un `401` de `/proyectos`, cierra la sesión y vuelve al login.
+Cómo lo resuelvan es su decisión.
 
 ## Cómo levantar el proyecto
 
@@ -34,7 +32,6 @@ Esto levanta:
 |---|---|---|
 | Frontend | http://localhost:5173 | React + Vite |
 | Backend | http://localhost:4000 | API REST — `/proyectos` |
-| Auth service | http://localhost:5001 | API REST — `/register`, `/login`, `/me` (Flask + JWT) |
 | MariaDB | localhost:3306 | usuario `root`, password `root123` |
 
 Los volúmenes montan tu código local dentro del contenedor, así que los cambios que hagas en `backend/` o `frontend/` se reflejan al vuelo.
@@ -53,35 +50,17 @@ docker compose down -v
 
 ## Cómo probar lo que ya funciona
 
-`/proyectos` exige un JWT. Primero regístrate y obtén el token del `auth-service`:
-
-```bash
-curl -X POST http://localhost:5001/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"tu@example.com","password":"clave12345","nombre":"Tu Nombre"}'
-
-TOKEN=$(curl -s -X POST http://localhost:5001/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"tu@example.com","password":"clave12345"}' | jq -r .token)
-```
-
-Y ahora usa ese token contra el backend:
-
 ```bash
 # Listar proyectos
-curl http://localhost:4000/proyectos -H "Authorization: Bearer $TOKEN"
+curl http://localhost:4000/proyectos
 
 # Crear un proyecto
 curl -X POST http://localhost:4000/proyectos \
-  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"nombre":"Desfibrilador X1","encargado":"Tu Nombre"}'
-
-# Sin token -> 401
-curl -i http://localhost:4000/proyectos
 ```
 
-O abre http://localhost:5173, inicia sesión y usa el formulario "Nuevo Proyecto".
+O abre http://localhost:5173 y usa el formulario "Nuevo Proyecto".
 
 Para explorar la base de datos directamente:
 
@@ -99,13 +78,11 @@ MariaDB [dispositivos_medicos]> SELECT * FROM Usuarios;
 ```
 01-docker-login/
 ├── docker-compose.yml
-├── backend/            /proyectos — Node + Express + Sequelize (protegido con JWT)
-│   └── middleware/     auth.js — verifica el JWT del auth-service
-├── auth-service/       /register, /login, /me — Python + Flask + JWT
+├── backend/            /proyectos — ya funciona completo
+├── auth-service/        vacía — el reto de hoy
 ├── frontend/
 │   └── src/
-│       ├── pages/       Login.jsx (auth-service) + NuevoProyecto.jsx (backend)
-│       ├── auth.js      cliente del auth-service + sesión en localStorage
+│       ├── pages/       NuevoProyecto.jsx (funciona)
 │       └── api.js
 └── database/
     └── init/             scripts SQL que MariaDB ejecuta al primer arranque

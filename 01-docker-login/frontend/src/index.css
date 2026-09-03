@@ -84,32 +84,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #334155;
-  font-size: 0.9rem;
-  color: #94a3b8;
-}
-
-.link-button {
-  background: none;
-  border: none;
-  color: #93c5fd;
-  font-weight: 600;
-  padding: 0;
-  cursor: pointer;
-  font-size: inherit;
-}
-
-.link-button:hover {
-  background: none;
-  text-decoration: underline;
-}
-
 .mensaje {
   padding: 0.6rem 0.8rem;
   border-radius: 4px;

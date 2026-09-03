@@ -12,8 +12,7 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller Docker + Login' });
 });
 
-// /proyectos queda protegido: exige un JWT válido emitido por el auth-service.
-app.use('/proyectos', require('./middleware/auth'), require('./routes/proyectos'));
+app.use('/proyectos', require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;
 
