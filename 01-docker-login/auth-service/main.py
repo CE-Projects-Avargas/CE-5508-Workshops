@@ -4,6 +4,7 @@ import mysql.connector
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import bcrypt
 
 
 app = FastAPI(title="Auth Service")
@@ -89,6 +90,8 @@ def register(user: RegisterRequest):
             )
 
         # Insertar usuario
+        password_hash = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
+
         cursor.execute(
             """
             INSERT INTO Usuarios (email, password, nombre)
@@ -96,7 +99,7 @@ def register(user: RegisterRequest):
             """,
             (
                 user.email,
-                user.password,
+                password_hash,
                 user.nombre
             )
         )
@@ -157,11 +160,16 @@ def login(user: LoginRequest):
             }
 
         # Verificar contraseña
-        if db_user["password"] != user.password:
+        stored_password = db_user["password"]
+        if isinstance(stored_password, str):
+            stored_password = stored_password.encode("utf-8")
+
+        if not bcrypt.checkpw(user.password.encode("utf-8"), stored_password):
             return {
-                "authenticated": False,
+                "authenticated": False, 
                 "message": "Correo o contraseña incorrectos"
             }
+
 
         return {
             "authenticated": True,
