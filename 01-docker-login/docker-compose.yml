@@ -1,70 +1,145 @@
 services:
-  mariadb:
+  # BASE DE AUTENTICACION
+  auth-db:
     image: mariadb:11
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: dispositivos_medicos
-    ports:
-      - "3306:3306"
     volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d
+      - auth_db_data:/var/lib/mysql
+      - ./database/auth:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - datos-auth
 
-  backend:
-    build: ./backend
+  # BASE DE OPERACION
+  operacion-db:
+    image: mariadb:11
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
-      DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
-      DB_USER: root
-      DB_PASSWORD: root123
-      PORT: 4000
-    ports:
-      - "4000:4000"
-    depends_on:
-      mariadb:
-        condition: service_healthy
+      MYSQL_ROOT_PASSWORD: root123
     volumes:
-      - ./backend:/app
-      - /app/node_modules
-  
+      - operacion_db_data:/var/lib/mysql
+      - ./database/operacion:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-operacion
+
+  # AUTH SERVICE
   auth-service:
     build: ./auth-service
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: auth-db
       DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
-      DB_USER: root
-      DB_PASSWORD: root123
+      DB_NAME: autenticacion
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
+      JWT_SECRET: taller2-secret
     ports:
-      - "8000:8000"
+      - "4001:4001"
     depends_on:
-      mariadb:
+      auth-db:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+    networks:
+      - interna
+      - datos-auth
 
+  # BACKEND 
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_PORT: 3306
+      DB_NAME: operacion
+      DB_USER: backend_user
+      DB_PASSWORD: backend_pass
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - interna
+      - datos-operacion
 
+  # PUMP SERVICE
+  pump-service: 
+    build: ./pump-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_PORT: 3306
+      DB_NAME: operacion
+      DB_USER: pump_user
+      DB_PASSWORD: pump_pass
+      PORT: 4002
+      JWT_SECRET: taller2-secret
+    ports:
+      - "4002:4002"
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    networks:
+      - interna
+      - datos-operacion
+
+  # API GATEWAY
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
+    depends_on:
+      - auth-service
+      - backend
+      - pump-service
+    networks: 
+      - borde
+      - interna
+
+  # FRONTEND
   frontend:
     build: ./frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:4000
+      VITE_API_URL: http://localhost:8080/api
     ports:
       - "5173:5173"
     depends_on:
-      - backend
+      - gateway
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks:
+      - borde
 
+# VOLUMENES
 volumes:
-  mariadb_data:
+  auth_db_data:
+  operacion_db_data:
+
+# REDES
+networks:
+  borde:
+  interna:
+  datos-auth:
+  datos-operacion:
