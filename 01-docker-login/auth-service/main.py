@@ -1,10 +1,10 @@
 import os
 
-import mysql.connector
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import bcrypt
+import mysql.connector # type: ignore
+from fastapi import FastAPI, HTTPException # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from pydantic import BaseModel # type: ignore
+import bcrypt # type: ignore
 
 
 app = FastAPI(title="Auth Service")
