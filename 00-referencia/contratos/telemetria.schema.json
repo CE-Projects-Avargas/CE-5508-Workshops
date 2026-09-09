@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ce5508/contratos/telemetria.schema.json",
+  "title": "Telemetría de dispositivo",
+  "description": "Contrato del mensaje que un dispositivo publica por MQTT y que el puente traslada a Kafka sin transformar. Definido en el Taller 3, consumido desde el Taller 2.",
+  "type": "object",
+  "required": ["deviceId", "ts", "seq", "estado", "metricas"],
+  "additionalProperties": false,
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{3,8}-[0-9]{4}$",
+      "description": "Identificador de la unidad desplegada. Debe existir en la tabla Dispositivos.",
+      "examples": ["BIV2-0042"]
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante de la lectura en UTC, generado por el DISPOSITIVO y no por el servidor."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Contador incremental por dispositivo. Junto con deviceId forma la llave de idempotencia: reprocesar el mismo par no debe duplicar el registro."
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["infundiendo", "detenido", "alarma", "standby"]
+    },
+    "metricas": {
+      "type": "object",
+      "required": ["caudalMlH", "presionKpa", "bateriaPct", "aireEnLinea"],
+      "additionalProperties": false,
+      "properties": {
+        "caudalMlH": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1200,
+          "description": "Caudal administrado en mililitros por hora."
+        },
+        "presionKpa": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 400,
+          "description": "Presión en la línea, en kilopascales."
+        },
+        "bateriaPct": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "aireEnLinea": {
+          "type": "boolean",
+          "description": "Detección de aire en la línea. true exige alerta crítica inmediata."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "deviceId": "BIV2-0042",
+      "ts": "2026-09-02T14:31:05.220Z",
+      "seq": 10432,
+      "estado": "infundiendo",
+      "metricas": {
+        "caudalMlH": 24.8,
+        "presionKpa": 118.4,
+        "bateriaPct": 87,
+        "aireEnLinea": false
+      }
+    }
+  ]
+}

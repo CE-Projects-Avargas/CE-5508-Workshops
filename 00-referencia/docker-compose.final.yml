@@ -1,0 +1,169 @@
+# ─────────────────────────────────────────────────────────────
+# CE5508 — Estado FINAL del sistema (semana 15)
+#
+# Este archivo NO se usa tal cual: es la referencia de destino.
+# Cada taller tiene su propio compose con los servicios de ese
+# punto del arco. Aquí se ve a dónde llegamos.
+#
+# Todo el software es libre y sin costo. Ver ARQUITECTURA.md §6.
+# ─────────────────────────────────────────────────────────────
+
+services:
+
+  # ═══════════════ TALLER 1 · Stack base ═══════════════
+
+  mariadb:
+    image: mariadb:11                      # GPL-2.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: dispositivos_medicos
+    ports: ["3306:3306"]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:                                  # API de gestión
+    build: ./backend
+    environment:
+      DB_HOST: mariadb
+      AUTH_URL: http://auth-service:4001
+      PORT: 4000
+    ports: ["4000:4000"]
+    depends_on:
+      mariadb: { condition: service_healthy }
+
+  auth-service:                             # RETO DEL T1
+    build: ./auth-service
+    environment:
+      DB_HOST: mariadb
+      JWT_SECRET: cambia-esto
+      PORT: 4001
+    ports: ["4001:4001"]
+    depends_on:
+      mariadb: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_URL: http://localhost:4000
+      VITE_AUTH_URL: http://localhost:4001
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+  # ═══════════════ TALLER 2 · Bus de eventos ═══════════════
+
+  kafka:
+    image: apache/kafka:3.9.0               # Apache-2.0 · imagen oficial
+    environment:                            # modo KRaft: sin Zookeeper
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports: ["9092:9092"]
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest    # Apache-2.0
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ce5508
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    ports: ["8080:8080"]
+    depends_on: [kafka]
+
+  telemetry-consumer:                        # RETO DEL T2
+    build: ./telemetry-consumer              # consume 'telemetria' → persiste
+    environment:
+      KAFKA_BROKER: kafka:9092
+      DB_HOST: mariadb
+      PORT: 4002
+    depends_on: [kafka, mariadb]
+
+  alert-service:                             # se entrega construido
+    build: ./alert-service                   # mismo topic, otro consumidor
+    environment:
+      KAFKA_BROKER: kafka:9092
+      DB_HOST: mariadb
+      PORT: 4003
+    depends_on: [kafka, mariadb]
+
+  # ═══════════════ TALLER 3 · El dispositivo ═══════════════
+
+  mosquitto:
+    image: eclipse-mosquitto:2               # EPL-2.0 / EDL-1.0
+    ports: ["1883:1883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  device-sim:                                # simula N dispositivos
+    build: ./device-sim
+    environment:
+      MQTT_HOST: mosquitto
+      NUM_DISPOSITIVOS: 12
+      INTERVALO_MS: 1000                     # cadencia fija
+    depends_on: [mosquitto]
+
+  mqtt-bridge:                               # MQTT → Kafka
+    build: ./mqtt-bridge
+    environment:
+      MQTT_HOST: mosquitto
+      KAFKA_BROKER: kafka:9092
+      PORT: 4005
+    depends_on: [mosquitto, kafka]
+
+  # ═══════════════ TALLER 4 · Observabilidad ═══════════════
+
+  prometheus:
+    image: prom/prometheus:latest            # Apache-2.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana-oss:latest        # AGPL-3.0 · usar -oss
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports: ["3000:3000"]
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on: [prometheus]
+
+  # ═══════════════ TALLER 5 · Despliegue ═══════════════
+
+  registry:
+    image: registry:2                        # Apache-2.0 · CNCF Distribution
+    ports: ["5000:5000"]
+    volumes:
+      - registry_data:/var/lib/registry
+
+  ci-runner:
+    image: gitea/act_runner:latest           # MIT
+    environment:
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${RUNNER_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ═══════════════ TALLER 6 · Agentes ═══════════════
+
+  mcp-server:                                # RETO DEL T6
+    build: ./mcp-server                      # expone solo lectura
+    environment:
+      BACKEND_URL: http://backend:4000
+      MCP_TOKEN: token-de-servicio
+      PORT: 4004
+    ports: ["4004:4004"]
+    depends_on: [backend]
+
+volumes:
+  mariadb_data:
+  grafana_data:
+  registry_data:
