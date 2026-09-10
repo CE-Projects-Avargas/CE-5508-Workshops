@@ -19,7 +19,7 @@ export async function listarProyectos() {
 }
 
 export async function registrarUsuario(datos) {
-  const res = await fetch(`${API_URL}/register`, {
+  const res = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos)
