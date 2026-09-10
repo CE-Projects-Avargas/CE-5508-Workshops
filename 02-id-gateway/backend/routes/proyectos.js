@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
 // POST /proyectos - crea un proyecto nuevo
 router.post('/', async (req, res) => {
   try {
-    const proyecto = await Proyecto.create(req.body);
+    const proyecto = await Proyecto.create({ ...req.body, ownerId: req.usuario.sub });
     res.status(201).json(proyecto);
   } catch (err) {
     res.status(400).json({ error: err.message });

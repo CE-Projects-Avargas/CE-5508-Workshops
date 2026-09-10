@@ -4,12 +4,27 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: dispositivos_medicos
+      MYSQL_DATABASE: operacion
     ports:
       - "3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: auth
+    volumes:
+      - auth_db_data:/var/lib/mysql
+      - ./auth-db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -22,7 +37,7 @@ services:
     environment:
       DB_HOST: mariadb
       DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
+      DB_NAME: operacion
       DB_USER: root
       DB_PASSWORD: root123
       PORT: 4000
@@ -40,9 +55,9 @@ services:
     build: ./auth-service
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: auth-db
       DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
+      DB_NAME: auth
       DB_USER: root
       DB_PASSWORD: root123
       PORT: 5001
@@ -51,7 +66,7 @@ services:
     ports:
       - "5001:5001"
     depends_on:
-      mariadb:
+      auth-db:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
@@ -73,3 +88,4 @@ services:
 
 volumes:
   mariadb_data:
+  auth_db_data:
