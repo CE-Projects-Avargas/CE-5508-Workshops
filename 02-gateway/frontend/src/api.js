@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 export async function crearProyecto(datos) {
   const res = await fetch(`${API_URL}/proyectos`, {
@@ -18,10 +18,8 @@ export async function listarProyectos() {
   return body;
 }
 
-const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:8000';
-
 export async function registrarUsuario(datos) {
-  const res = await fetch(`${AUTH_API_URL}/register`, {
+  const res = await fetch(`${API_URL}/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos)
@@ -32,7 +30,7 @@ export async function registrarUsuario(datos) {
 }
 
 export async function iniciarSesion(credenciales) {
-  const res = await fetch(`${AUTH_API_URL}/login`, {
+  const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(credenciales)
@@ -40,5 +38,5 @@ export async function iniciarSesion(credenciales) {
   const body = await res.json();
   if (!res.ok) throw new Error(body.detail || 'Error al iniciar sesión');
   if (!body.authenticated) throw new Error(body.message || 'Correo o contraseña incorrectos');
-  return body.user;
+  return body;
 }

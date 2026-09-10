@@ -1,25 +1,17 @@
 import os
 
-import mysql.connector
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import bcrypt
+import mysql.connector # type: ignore
+from fastapi import FastAPI, HTTPException # type: ignore
+from pydantic import BaseModel # type: ignore
+import bcrypt # type: ignore
+import jwt 
+from datetime import datetime, timedelta, timezone
 
 
 app = FastAPI(title="Auth Service")
 
-# Permite que el frontend (otro origen: localhost:5173) llame a este
-# servicio (localhost:8000). Sin esto el navegador bloquea las
-# peticiones fetch() por la politica de CORS.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
+JWT_ALGORITHM = "HS256"
 
 # --------------------------------------------------
 # Modelos de datos
@@ -171,9 +163,20 @@ def login(user: LoginRequest):
             }
 
 
+        token = jwt.encode(
+            {
+                "sub": str(db_user["id"]),
+                "email": db_user["email"],
+                "exp": datetime.now(timezone.utc) + timedelta(hours=2)
+            },
+            JWT_SECRET,
+            algorithm=JWT_ALGORITHM
+        )
+
         return {
             "authenticated": True,
             "message": "Login exitoso",
+            "token": token,
             "user": {
                 "id": db_user["id"],
                 "email": db_user["email"],
