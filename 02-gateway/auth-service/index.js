@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -8,7 +7,6 @@ const pool = require('./db');
 const { inicializarClaves, obtenerClaveActual, construirJWKS, rotarClave } = require('./keys');
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 4001;
