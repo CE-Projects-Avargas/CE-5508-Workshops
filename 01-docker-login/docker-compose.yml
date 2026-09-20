@@ -36,16 +36,16 @@ services:
       - /app/node_modules
 
   backend-db:
-  image: mariadb:11
-  restart: unless-stopped
-  environment:
-    MYSQL_ROOT_PASSWORD: root123
-    MYSQL_DATABASE: dispositivos_medicos
-  ports:
-    - "3308:3306"
-  volumes:
-    - backend_data:/var/lib/mysql
-    - ./database/backend-init:/docker-entrypoint-initdb.d
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: dispositivos_medicos
+    ports:
+      - "3308:3306"
+    volumes:
+      - backend_data:/var/lib/mysql
+      - ./database/backend-init:/docker-entrypoint-initdb.d
 
   auth-service:
     build: ./auth-service
@@ -67,18 +67,18 @@ services:
       - /app/node_modules
 
   auth-db:
-  image: mariadb:11
-  restart: unless-stopped
-  environment:
-    MYSQL_ROOT_PASSWORD: authroot123
-    MYSQL_DATABASE: auth_db
-    MYSQL_USER: auth_user
-    MYSQL_PASSWORD: authpass
-  ports:
-    - "3309:3306"
-  volumes:
-    - auth_data:/var/lib/mysql
-    - ./database/auth-init:/docker-entrypoint-initdb.d
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: authroot123
+      MYSQL_DATABASE: auth_db
+      MYSQL_USER: auth_user
+      MYSQL_PASSWORD: authpass
+    ports:
+      - "3309:3306"
+    volumes:
+      - auth_data:/var/lib/mysql
+      - ./database/auth-init:/docker-entrypoint-initdb.d
 
   frontend:
     build: ./frontend

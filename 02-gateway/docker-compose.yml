@@ -24,7 +24,7 @@ services:
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
-    depends_on: [backend, pump-service]   # auth-service lo agregan ustedes
+    depends_on: [backend, pump-service, auth-service]
     networks: [borde, interna]
 
   # ═══════════════ DATOS ═══════════════
@@ -36,7 +36,7 @@ services:
       MARIADB_ROOT_PASSWORD: root123
     volumes:
       - auth_data:/var/lib/mysql
-      - ./database/auth:/docker-entrypoint-initdb.d:ro
+      - ./database/init/auth:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -53,7 +53,7 @@ services:
       MARIADB_ROOT_PASSWORD: root123
     volumes:
       - operacion_data:/var/lib/mysql
-      - ./database/operacion:/docker-entrypoint-initdb.d:ro
+      - ./database/init/operacion:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -99,6 +99,24 @@ services:
     depends_on:
       operacion-db: { condition: service_healthy }
     networks: [interna, datos-operacion]
+
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: auth-db
+      DB_NAME: autenticacion
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
+      PORT: 4001
+    ports:
+      - "4001:4001"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - interna
+      - datos-auth
 
   pump-service:                  # NUEVO — el reto de este taller
     build: ./pump-service
