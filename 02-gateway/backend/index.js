@@ -12,13 +12,14 @@ const verificarToken = require('./auth');
 // Crea y configura el servidor para recibir datos JSON.
 const app = express();
 app.use(express.json());
+app.use(verificarToken);
 
 // Ruta para comprobar que el backend funciona.
 app.get('/', (req, res) => {
   res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller Docker + Login' });
 });
 
-app.use('/proyectos', verificarToken, require('./routes/proyectos'));
+app.use('/proyectos', require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;
 

@@ -25,6 +25,10 @@ const Proyecto = sequelize.define('Proyecto', {
   estado: {
     type: DataTypes.ENUM('planificacion', 'desarrollo', 'pruebas', 'produccion'),
     defaultValue: 'planificacion'
+  },
+  ownerId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
   }
 });
 
