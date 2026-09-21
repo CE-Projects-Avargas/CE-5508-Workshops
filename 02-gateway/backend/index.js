@@ -6,6 +6,9 @@ require('dotenv').config();
 // Importa la conexión a MariaDB configurada con Sequelize.
 const sequelize = require('./db');
 
+// Importa el middleware que verifica los tokens JWT en las solicitudes.
+const verificarToken = require('./auth');
+
 // Crea y configura el servidor para recibir datos JSON.
 const app = express();
 app.use(express.json());
@@ -15,7 +18,7 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller Docker + Login' });
 });
 
-app.use('/proyectos', require('./routes/proyectos'));
+app.use('/proyectos', verificarToken, require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;
 

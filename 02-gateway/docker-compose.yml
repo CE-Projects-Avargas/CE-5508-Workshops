@@ -93,7 +93,9 @@ services:
       DB_NAME: operacion
       DB_USER: backend_user      # permisos solo sobre Proyectos
       DB_PASSWORD: backend_pass
-      JWT_SECRET: secreto-compartido-del-taller
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
       PORT: 4000
     ports: ["4000:4000"]         # expuesto a propósito: ver el ejercicio del gateway
     depends_on:
