@@ -43,7 +43,6 @@ services:
       DB_NAME: autenticacion
       DB_USER: auth_user
       DB_PASSWORD: auth_pass
-      JWT_SECRET: taller2-secret
     ports:
       - "4001:4001"
     depends_on:
@@ -51,6 +50,7 @@ services:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+      - auth-keys:/app/keys
     networks:
       - interna
       - datos-auth
@@ -136,6 +136,7 @@ services:
 volumes:
   auth_db_data:
   operacion_db_data:
+  auth-keys:
 
 # REDES
 networks:

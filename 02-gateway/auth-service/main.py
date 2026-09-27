@@ -6,12 +6,41 @@ from pydantic import BaseModel # type: ignore
 import bcrypt # type: ignore
 import jwt 
 from datetime import datetime, timedelta, timezone
+from keys import load_keys
+import base64
+from cryptography.hazmat.primitives.asymmetric import rsa
 
+
+KEY_ID = "auth-key-1"
+ISSUER = "cafetico-auth"
+AUDIENCE = "cafetico-api"
 
 app = FastAPI(title="Auth Service")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")
-JWT_ALGORITHM = "HS256"
+private_key, public_key = load_keys() 
+
+def int_to_base64url(value: int) -> str:
+    byte_length = (value.bit_length() + 7) // 8
+    value_bytes = value.to_bytes(byte_length, byteorder="big")
+
+    return base64.urlsafe_b64encode(value_bytes).rstrip(b"=").decode("ascii")
+
+
+def public_key_to_jwk(public_key):
+    if not isinstance(public_key, rsa.RSAPublicKey):
+        raise TypeError("La clave pública no es una clave RSA")
+
+    public_numbers = public_key.public_numbers()
+
+    return {
+        "kty": "RSA",
+        "use": "sig",
+        "kid": KEY_ID,
+        "alg": "RS256",
+        "n": int_to_base64url(public_numbers.n),
+        "e": int_to_base64url(public_numbers.e),
+    }
+
 
 # --------------------------------------------------
 # Modelos de datos
@@ -162,15 +191,21 @@ def login(user: LoginRequest):
                 "message": "Correo o contraseña incorrectos"
             }
 
+        payload = {
+            "sub": str(db_user["id"]),
+            "email": db_user["email"],
+            "iss": ISSUER,
+            "aud": AUDIENCE,
+            "exp": datetime.now(timezone.utc) + timedelta(hours=2)
+        }
 
         token = jwt.encode(
-            {
-                "sub": str(db_user["id"]),
-                "email": db_user["email"],
-                "exp": datetime.now(timezone.utc) + timedelta(hours=2)
-            },
-            JWT_SECRET,
-            algorithm=JWT_ALGORITHM
+            payload,
+            private_key,
+            algorithm="RS256",
+            headers={
+                "kid": KEY_ID
+            }
         )
 
         return {
@@ -196,3 +231,16 @@ def login(user: LoginRequest):
 
         if connection:
             connection.close()
+
+
+# --------------------------------------------------
+# JWKS
+# --------------------------------------------------
+
+@app.get("/jwks")
+def get_jwks():
+    return {
+        "keys": [
+            public_key_to_jwk(public_key)
+        ]
+    }
