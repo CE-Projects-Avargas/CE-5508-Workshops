@@ -15,6 +15,14 @@ KEY_ID = "auth-key-1"
 ISSUER = "cafetico-auth"
 AUDIENCE = "cafetico-api"
 
+ACCESS_TOKEN_EXPIRE = 5
+REFRESH_TOKEN_EXPIRE = 20
+
+ACCESS_TOKEN_TYPE = "access"
+REFRESH_TOKEN_TYPE = "refresh"
+
+used_refresh_tokens = set()
+
 app = FastAPI(title="Auth Service")
 
 private_key, public_key = load_keys() 
@@ -41,6 +49,60 @@ def public_key_to_jwk(public_key):
         "e": int_to_base64url(public_numbers.e),
     }
 
+# --------------------------------------------------
+# ACCESS TOKEN
+# --------------------------------------------------
+
+def create_access_token(user):
+    now = datetime.utcnow()
+
+    payload = {
+        "sub": str(user["id"]),
+        "iss": ISSUER,
+        "aud": AUDIENCE,
+        "type": ACCESS_TOKEN_TYPE,
+        "iat": now,
+        "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE),
+    }
+
+    if "email" in user:
+        payload["email"] = user["email"]
+
+    return jwt.encode(
+        payload,
+        private_key,
+        algorithm="RS256",
+        headers={
+            "kid": KEY_ID
+        }
+    )
+
+
+# --------------------------------------------------
+# REFRESH TOKEN
+# --------------------------------------------------
+
+def create_refresh_token(user):
+    now = datetime.utcnow()
+
+    payload = {
+        "sub": str(user["id"]),
+        "iss": ISSUER,
+        "aud": ISSUER,
+        "type": REFRESH_TOKEN_TYPE,
+        "iat": now,
+        "exp": now + timedelta(minutes=REFRESH_TOKEN_EXPIRE),
+    }
+
+    return jwt.encode(
+        payload,
+        private_key,
+        algorithm="RS256",
+        headers={
+            "kid": KEY_ID
+        }
+    )
+
 
 # --------------------------------------------------
 # Modelos de datos
@@ -55,6 +117,9 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 # --------------------------------------------------
@@ -191,27 +256,14 @@ def login(user: LoginRequest):
                 "message": "Correo o contraseña incorrectos"
             }
 
-        payload = {
-            "sub": str(db_user["id"]),
-            "email": db_user["email"],
-            "iss": ISSUER,
-            "aud": AUDIENCE,
-            "exp": datetime.now(timezone.utc) + timedelta(hours=2)
-        }
-
-        token = jwt.encode(
-            payload,
-            private_key,
-            algorithm="RS256",
-            headers={
-                "kid": KEY_ID
-            }
-        )
+        access_token = create_access_token(db_user)
+        refresh_token = create_refresh_token(db_user)
 
         return {
             "authenticated": True,
             "message": "Login exitoso",
-            "token": token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
             "user": {
                 "id": db_user["id"],
                 "email": db_user["email"],
@@ -243,4 +295,58 @@ def get_jwks():
         "keys": [
             public_key_to_jwk(public_key)
         ]
+    }
+
+
+# --------------------------------------------------
+# REFRESH
+# --------------------------------------------------
+
+@app.post("/refresh")
+def refresh_token(request: RefreshRequest):
+    try:
+        payload = jwt.decode(
+            request.refresh_token,
+            public_key,
+            algorithms=["RS256"],
+            issuer=ISSUER,
+            audience=ISSUER,
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token expirado"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token inválido"
+        )
+
+    if payload.get("type") != REFRESH_TOKEN_TYPE:
+        raise HTTPException(
+            status_code=401,
+            detail="El token no es un refresh token"
+        )
+
+    if request.refresh_token in used_refresh_tokens:
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token ya utilizado"
+        )
+
+    used_refresh_tokens.add(request.refresh_token)
+
+    user = {
+        "id": payload["sub"]
+    }
+
+    access_token = create_access_token(user)
+    refresh_token = create_refresh_token(user)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token
     }
