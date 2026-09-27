@@ -1,16 +1,18 @@
 // Importa las herramientas para crear el servidor, permitir solicitudes
 // del frontend y leer las variables de entorno.
 const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
 
 // Importa la conexión a MariaDB configurada con Sequelize.
 const sequelize = require('./db');
 
+// Importa el middleware que verifica los tokens JWT en las solicitudes.
+const verificarToken = require('./auth');
+
 // Crea y configura el servidor para recibir datos JSON.
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(verificarToken);
 
 // Ruta para comprobar que el backend funciona.
 app.get('/', (req, res) => {

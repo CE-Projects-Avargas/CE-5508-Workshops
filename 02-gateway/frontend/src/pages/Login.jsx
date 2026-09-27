@@ -4,7 +4,7 @@ import { login, registrar } from '../api.js';
 const LOGIN_INICIAL = { email: '', password: '' };
 const REGISTRO_INICIAL = { nombre: '', email: '', password: '' };
 
-// onLogin recibe el objeto usuario devuelto por el auth-service
+// onLogin recibe los tokens devueltos por el auth-service
 // y le avisa a App.jsx que ya hay sesion.
 export default function Login({ onLogin }) {
   const [modo, setModo] = useState('login'); // 'login' | 'registro'
@@ -26,8 +26,11 @@ export default function Login({ onLogin }) {
     setCargando(true);
     setMensaje(null);
     try {
-      const { usuario } = await login(formLogin);
-      onLogin(usuario);
+      const { accessToken, refreshToken, expiresIn } = await login(formLogin);
+      if (!accessToken || !refreshToken || !expiresIn) {
+        throw new Error('La respuesta de login no trajo tokens completos');
+      }
+      onLogin({ accessToken, refreshToken, expiresIn });
     } catch (err) {
       setMensaje({ tipo: 'error', texto: err.message });
     } finally {
