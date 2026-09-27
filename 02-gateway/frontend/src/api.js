@@ -19,10 +19,62 @@ function headersAutenticados(headers = {}) {
   };
 }
 
+// Si llegan varias peticiones con 401 al mismo tiempo, todas esperan
+// la misma renovacion. Si cada una llamara a /auth/refresh por su cuenta,
+// la segunda usaria un refresh ya rotado y cerraria la sesion.
+let renovacionEnCurso = null;
+
+function renovarSesion() {
+  if (!renovacionEnCurso) {
+    renovacionEnCurso = (async () => {
+      const sesion = JSON.parse(localStorage.getItem('sesion'));
+      if (!sesion?.refreshToken) throw new Error('No hay refresh token');
+
+      const res = await fetch(`${GATEWAY_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: sesion.refreshToken })
+      });
+      if (!res.ok) throw new Error('No se pudo renovar la sesion');
+
+      const { accessToken, refreshToken, expiresIn } = await res.json();
+      localStorage.setItem('sesion', JSON.stringify({
+        ...sesion,
+        accessToken,
+        refreshToken,
+        expiresIn,
+        expiresAt: Date.now() + expiresIn * 1000
+      }));
+    })().finally(() => {
+      renovacionEnCurso = null;
+    });
+  }
+  return renovacionEnCurso;
+}
+
+// fetch con el access token. Ante un 401 renueva los tokens una vez y
+// reintenta; si la renovacion falla, avisa a App.jsx para volver al login.
+async function fetchAutenticado(url, opciones = {}) {
+  const hacerPeticion = () =>
+    fetch(url, { ...opciones, headers: headersAutenticados(opciones.headers) });
+
+  const res = await hacerPeticion();
+  if (res.status !== 401) return res;
+
+  try {
+    await renovarSesion();
+  } catch {
+    localStorage.removeItem('sesion');
+    window.dispatchEvent(new Event('sesion-expirada'));
+    throw new Error('La sesion expiro, inicie sesion de nuevo');
+  }
+  return hacerPeticion();
+}
+
 export async function crearProyecto(datos) {
-  const res = await fetch(`${GATEWAY_URL}/proyectos`, {
+  const res = await fetchAutenticado(`${GATEWAY_URL}/proyectos`, {
     method: 'POST',
-    headers: headersAutenticados({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(datos)
   });
   const body = await res.json();
@@ -31,9 +83,7 @@ export async function crearProyecto(datos) {
 }
 
 export async function listarProyectos() {
-  const res = await fetch(`${GATEWAY_URL}/proyectos`, {
-    headers: headersAutenticados()
-  });
+  const res = await fetchAutenticado(`${GATEWAY_URL}/proyectos`);
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || 'Error al listar proyectos');
   return body;

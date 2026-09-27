@@ -56,6 +56,12 @@ export default function App() {
     }
   }, []);
 
+  // Si api.js no pudo renovar los tokens, se vuelve al login
+  useEffect(() => {
+    window.addEventListener('sesion-expirada', handleLogout);
+    return () => window.removeEventListener('sesion-expirada', handleLogout);
+  }, []);
+
   function handleLogin(tokens) {
     const nuevaSesion = construirSesion(tokens);
     localStorage.setItem(SESION_KEY, JSON.stringify(nuevaSesion));
