@@ -135,7 +135,12 @@ services:
       DB_USER: pump_user         # permisos solo sobre Bombas, Productos y Eventos
       DB_PASSWORD: pump_pass
       BACKEND_URL: http://backend:4000
-      JWT_SECRET: secreto-compartido-del-taller
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
+      JWKS_CACHE_TTL_MS: 300000
+      JWKS_CACHE_MAX_ENTRIES: 5
+      JWKS_REQUESTS_PER_MINUTE: 10
       PORT: 4002
     ports: ["4002:4002"]
     depends_on:
