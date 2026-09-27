@@ -166,7 +166,7 @@ def login():
             {
                 "usuario_id": usuario["id"],
                 "email": usuario["email"],
-                "exp": datetime.now(timezone.utc) + timedelta(hours=2)
+                "exp": datetime.now(timezone.utc) + timedelta(seconds=5)
             },
             os.getenv("JWT_SECRET", "clave-desarrollo-taller1"),
             algorithm="HS256"

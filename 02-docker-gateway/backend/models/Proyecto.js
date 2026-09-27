@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
+//Modelo Sequelize asociado a los proyectos almacenados en backend_db 
 const Proyecto = sequelize.define('Proyecto', {
   nombre: {
     type: DataTypes.STRING,

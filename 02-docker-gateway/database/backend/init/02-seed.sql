@@ -1,4 +1,4 @@
--- Datos de ejemplo para backend-db
+-- Datos de prueba iniciales para verificar el funcionamiento de backend_db
 
 USE backend_db;
 

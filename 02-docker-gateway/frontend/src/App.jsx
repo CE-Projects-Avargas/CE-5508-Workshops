@@ -1,47 +1,86 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import NuevoProyecto from './pages/NuevoProyecto.jsx';
 
+
 export default function App() {
-  //Revisa si hay un token en el localStorage para determinar si el usuario está autenticado
+  //Considera iniciada la sesión mientras exista un refresh token
   const [autenticado, setAutenticado] = useState(
-    Boolean(localStorage.getItem('token'))
+    Boolean(localStorage.getItem('refreshToken'))
   );
- //Controla si se muesytra la pantalla de login o la de registro
+
   const [pantalla, setPantalla] = useState('login');
 
-  //Ya elimina los datos del usuario y el token del localStorage y cambia la pantalla a login
+
+  // Elimina las credenciales y regresa al login
   function cerrarSesion() {
 
-    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('expiracion');
     localStorage.removeItem('usuario');
+
+    // Token utilizado en el Taller 1
+    localStorage.removeItem('token');
 
     setAutenticado(false);
     setPantalla('login');
 
   }
 
+
+  // Permite cerrar la sesión cuando falla la renovación
+  useEffect(() => {
+
+    function manejarSesionExpirada() {
+      cerrarSesion();
+    }
+
+    window.addEventListener(
+      'sesion-expirada',
+      manejarSesionExpirada
+    );
+
+    return () => {
+
+      window.removeEventListener(
+        'sesion-expirada',
+        manejarSesionExpirada
+      );
+
+    };
+
+  }, []);
+
+
   if (autenticado) {
 
     return (
+
       <main>
 
-        <button onClick={cerrarSesion}>
+        <button
+          type="button"
+          onClick={cerrarSesion}
+        >
           Cerrar sesión
         </button>
 
         <NuevoProyecto />
 
       </main>
+
     );
 
   }
 
+
   if (pantalla === 'registro') {
 
     return (
+
       <main>
 
         <Register
@@ -51,24 +90,30 @@ export default function App() {
         />
 
       </main>
+
     );
 
   }
 
+
   return (
+
     <main>
 
       <Login
+
         onLogin={() =>
           setAutenticado(true)
         }
 
-        onRegistrar={() =>{
-          console.log('Cambiar a registro');
-          setPantalla('registro');
-        }}
+        onRegistrar={() =>
+          setPantalla('registro')
+        }
+
       />
 
     </main>
+
   );
+
 }

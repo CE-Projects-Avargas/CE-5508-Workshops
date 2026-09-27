@@ -17,9 +17,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - auth-network
 
 
   # Base de datos exclusiva del backend de proyectos
+  #No tiene info de la autenticación 
   backend-db:
     image: mariadb:11
     restart: unless-stopped
@@ -36,9 +39,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - backend-network
 
 
-  # Backend de proyectos
+  # Backend de proyectos, solo accede a backend-db y a auth-service para validar tokens JWT, no tiene acceso a auth-db
   backend:
     build: ./backend
     restart: unless-stopped
@@ -49,6 +54,11 @@ services:
       DB_USER: backend_user
       DB_PASSWORD: backend123
       PORT: 4000
+      
+      JWKS_URL: http://auth-service:5000/jwks #Endpoint para obtener las claves públicas del servicio de autenticación
+      #Claves de configuración para validar los tokens JWT emitidos por el servicio de autenticación
+      JWT_ISSUER: ce5508-auth
+      JWT_AUDIENCE: ce5508-backend  
     ports:
       - "4000:4000"
     depends_on:
@@ -57,9 +67,13 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+    networks:
+      - backend-network
+      - gateway-network
+    
 
 
-  # Servicio de autenticación en Python/Flask
+  # Servicio de autenticación en Python/Flask, emite los access/refresh tokens 
   auth-service:
     build: ./auth-service
     restart: unless-stopped
@@ -70,6 +84,7 @@ services:
       DB_USER: auth_user
       DB_PASSWORD: auth123
       PORT: 5000
+      JWT_PRIVATE_KEY_PATH: /run/secrets/auth_private.pem
     ports:
       - "5000:5000"
     depends_on:
@@ -77,6 +92,10 @@ services:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+      - ./secrets/private.pem:/run/secrets/auth_private.pem:ro #la clave privada para firmar los tokens JWT, solo la usa auth-service y en modo lectura
+    networks:
+      - auth-network
+      - gateway-network
 
 
   # Frontend React
@@ -92,8 +111,10 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks:
+      - gateway-network
 
-  # Gateway de API
+  # Gateway de API, el unico punto de entrada a las APIs
   gateway:
     build: ./gateway
     restart: unless-stopped
@@ -102,8 +123,15 @@ services:
     depends_on:
       - auth-service
       - backend
+    networks:
+      - gateway-network
 
 
 volumes:
-  auth_db_data:
-  backend_db_data:
+  auth_db_data: #Volumen para persistir los datos de la base de datos del servicio de autenticación
+  backend_db_data: #Volumen para persistir los datos de la base de datos del backend de proyectos
+
+networks:
+  auth-network: #Comunicación entre auth-service y auth-db
+  backend-network: #Comunicación entre backend y backend-db
+  gateway-network: #Comunicación entre gateway, auth-service, backend y frontend

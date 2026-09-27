@@ -4,12 +4,87 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
 import mysql.connector
+import secrets
+import hashlib
 
 from flask import Flask, request, jsonify
 from mysql.connector import IntegrityError, Error
 
+from jwt.algorithms import RSAAlgorithm
+from cryptography.hazmat.primitives import serialization
+
 
 auth = Flask(__name__)
+
+
+# Configuración de firma asimétrica de los access tokens.
+# Solo auth-service tiene acceso a la clave privada RSA.
+PRIVATE_KEY_PATH = os.getenv(
+    "JWT_PRIVATE_KEY_PATH",
+    "/run/secrets/auth_private.pem"
+)
+
+#Identifica la clave utilizada para permitir futuras rotaciones de claves sin invalidar los tokens existentes
+JWT_KID = "auth-rsa-2026-01"
+
+# Configuración de los tokens JWT
+JWT_ISSUER = "ce5508-auth"
+JWT_AUDIENCE = "ce5508-backend"
+
+#Access tokens expiran en 15 minutos, refresh tokens expiran en 8 horas
+ACCESS_TOKEN_SECONDS = 900
+REFRESH_TOKEN_SECONDS = 28800
+
+
+# Carga la clave privada RSA montada únicamente en auth-service
+with open(PRIVATE_KEY_PATH, "rb") as archivo:
+    PRIVATE_KEY = serialization.load_pem_private_key(
+        archivo.read(),
+        password=None
+    )
+
+
+# Obtiene la clave pública correspondiente a la privada(se publica mediante JWKS)
+PUBLIC_KEY = PRIVATE_KEY.public_key()
+
+
+
+# Genera un JWT firmado con la clave privada RSA
+def generar_access_token(usuario):
+
+    ahora = datetime.now(timezone.utc)
+
+    token = jwt.encode(
+        {
+            "sub": str(usuario["id"]),
+            "email": usuario["email"],
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "iat": ahora,
+            "exp": ahora + timedelta(
+                seconds=ACCESS_TOKEN_SECONDS
+            )
+        },
+        PRIVATE_KEY,
+        algorithm="RS256",
+        headers={
+            "kid": JWT_KID
+        }
+    )
+
+    return token
+
+# Genera un refresh token aleatorio y calcula su hash SHA-256(solo el hash se almacena en la base de datos)
+def generar_refresh_token():
+
+    refresh_token = secrets.token_urlsafe(48)
+
+    token_hash = hashlib.sha256(
+        refresh_token.encode("utf-8")
+    ).hexdigest()
+
+    return refresh_token, token_hash
+
 
 #Función para conectarse a la base de datos MySQL
 def conectar_bd():
@@ -21,7 +96,7 @@ def conectar_bd():
         password=os.getenv("DB_PASSWORD", "auth123")
     )
 
-#Verifica que el servicio de autenticación está funcionando
+#Endpoint para comprobar que auth-service está disponible.
 @auth.route("/health", methods=["GET"])
 def health():
     return jsonify({
@@ -30,6 +105,27 @@ def health():
     }), 200
 
 
+# Expone la clave pública RSA para verificar los JWT
+@auth.route("/jwks", methods=["GET"])
+def jwks():
+
+    clave_publica = RSAAlgorithm.to_jwk(
+        PUBLIC_KEY,
+        as_dict=True
+    )
+
+    #Añade los metadatos necesarios para identificar el uso y el algoritmo de la clave pública
+    clave_publica["kid"] = JWT_KID
+    clave_publica["use"] = "sig"
+    clave_publica["alg"] = "RS256"
+
+    return jsonify({
+        "keys": [
+            clave_publica
+        ]
+    }), 200
+
+#Registra un usuario nuevo en auth-db
 @auth.route("/register", methods=["POST"])
 def register():
 
@@ -157,16 +253,64 @@ def login():
             return jsonify({
                 "error": "Credenciales incorrectas"
             }), 401
-        #Si las credenciales son correctas, se genera un token JWT con la información del usuario y una fecha de expiración de 2 horas
+        #Si las credenciales son correctas, se genera un token JWT con la información del usuario y una fecha de expiración de 5 segundos
+        
+        
+        # Genera un access token firmado con la clave privada RSA
+        ahora = datetime.now(timezone.utc)
+
         token = jwt.encode(
             {
-                "usuario_id": usuario["id"],
+                "sub": str(usuario["id"]),
                 "email": usuario["email"],
-                "exp": datetime.now(timezone.utc) + timedelta(seconds=5)
+                "iss": JWT_ISSUER,
+                "aud": JWT_AUDIENCE,
+                "iat": ahora,
+                "exp": ahora + timedelta(seconds=ACCESS_TOKEN_SECONDS)
             },
-            os.getenv("JWT_SECRET", "clave-desarrollo-taller1"),
-            algorithm="HS256"
+            PRIVATE_KEY,
+            algorithm="RS256",
+            headers={
+                "kid": JWT_KID
+            }
         )
+                # Genera las dos credenciales después de validar el login.
+        access_token = generar_access_token(usuario)
+
+        refresh_token, token_hash = generar_refresh_token()
+
+        # Calcula la fecha de expiración del refresh token.
+        expiracion = (
+            datetime.now(timezone.utc)
+            + timedelta(seconds=REFRESH_TOKEN_SECONDS)
+        ).replace(tzinfo=None)
+
+        # Guarda únicamente el hash del refresh token.
+        cursor.execute(
+            """
+            INSERT INTO RefreshTokens
+                (usuario_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (
+                usuario["id"],
+                token_hash,
+                expiracion
+            )
+        )
+
+        conexion.commit()
+
+        return jsonify({
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresIn": ACCESS_TOKEN_SECONDS,
+            "usuario": {
+                "id": usuario["id"],
+                "nombre": usuario["nombre"],
+                "email": usuario["email"]
+            }
+        }), 200
 
         return jsonify({
             "mensaje": "Login correcto",
@@ -194,6 +338,145 @@ def login():
         if conexion and conexion.is_connected():
             conexion.close()
 
+
+# Renueva las credenciales e invalida el refresh token utilizado.
+@auth.route("/refresh", methods=["POST"])
+def refresh():
+
+    datos = request.get_json(silent=True) or {}
+
+    refresh_token = datos.get("refreshToken")
+
+    if not isinstance(refresh_token, str) or not refresh_token:
+        return jsonify({
+            "error": "Refresh token obligatorio"
+        }), 400
+
+    # Calcula el hash para buscar el token en la base de datos.
+    token_hash = hashlib.sha256(
+        refresh_token.encode("utf-8")
+    ).hexdigest()
+
+    conexion = None
+    cursor = None
+
+    try:
+
+        conexion = conectar_bd()
+        cursor = conexion.cursor(dictionary=True)
+
+        # Bloquea el registro mientras se realiza la rotación.
+        cursor.execute(
+            """
+            SELECT
+                rt.id,
+                rt.expires_at,
+                rt.revoked_at,
+                u.id AS usuario_id,
+                u.nombre,
+                u.email
+
+            FROM RefreshTokens rt
+
+            INNER JOIN Usuarios u
+                ON rt.usuario_id = u.id
+
+            WHERE rt.token_hash = %s
+
+            FOR UPDATE
+            """,
+            (token_hash,)
+        )
+
+        registro = cursor.fetchone()
+
+        if registro is None:
+            return jsonify({
+                "error": "Refresh token inválido"
+            }), 401
+
+        ahora = datetime.now(timezone.utc).replace(
+            tzinfo=None
+        )
+
+        # Verifica que no esté vencido ni haya sido utilizado.
+        if (
+            registro["revoked_at"] is not None
+            or registro["expires_at"] <= ahora
+        ):
+            return jsonify({
+                "error": "Refresh token inválido o expirado"
+            }), 401
+
+        usuario = {
+            "id": registro["usuario_id"],
+            "nombre": registro["nombre"],
+            "email": registro["email"]
+        }
+
+        # Invalida el refresh token anterior.
+        cursor.execute(
+            """
+            UPDATE RefreshTokens
+            SET revoked_at = %s
+            WHERE id = %s
+            """,
+            (
+                ahora,
+                registro["id"]
+            )
+        )
+
+        # Genera un nuevo par de credenciales.
+        nuevo_access_token = generar_access_token(usuario)
+
+        nuevo_refresh_token, nuevo_hash = generar_refresh_token()
+
+        nueva_expiracion = (
+            datetime.now(timezone.utc)
+            + timedelta(seconds=REFRESH_TOKEN_SECONDS)
+        ).replace(tzinfo=None)
+
+        # Almacena el hash del nuevo refresh token.
+        cursor.execute(
+            """
+            INSERT INTO RefreshTokens
+                (usuario_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (
+                usuario["id"],
+                nuevo_hash,
+                nueva_expiracion
+            )
+        )
+
+        conexion.commit()
+
+        return jsonify({
+            "accessToken": nuevo_access_token,
+            "refreshToken": nuevo_refresh_token,
+            "expiresIn": ACCESS_TOKEN_SECONDS
+        }), 200
+
+    except Error as error:
+
+        if conexion:
+            conexion.rollback()
+
+        print("Error al renovar token:", error)
+
+        return jsonify({
+            "error": "Error interno del servidor"
+        }), 500
+
+    finally:
+
+        if cursor:
+            cursor.close()
+
+        if conexion and conexion.is_connected():
+            conexion.close()
 
 if __name__ == "__main__":
 

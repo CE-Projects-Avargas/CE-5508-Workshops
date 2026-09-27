@@ -1,8 +1,9 @@
+// Rutas de proyectos, llegan aquí únicamente después de superar la validación JWT del middleware.
 const express = require('express');
 const router = express.Router();
 const Proyecto = require('../models/Proyecto');
 
-// GET /proyectos - lista todos los proyectos
+//lista todos los proyectos
 router.get('/', async (req, res) => {
   try {
     const proyectos = await Proyecto.findAll({ order: [['createdAt', 'DESC']] });
@@ -12,7 +13,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /proyectos - crea un proyecto nuevo
+//crea un proyecto nuevo
 router.post('/', async (req, res) => {
   try {
     const proyecto = await Proyecto.create(req.body);

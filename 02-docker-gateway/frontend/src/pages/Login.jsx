@@ -15,26 +15,41 @@ export default function Login({ onLogin, onRegistrar }) {
 
     setError('');
 
-
     try {
-      //Envía las credenciales al auth-service 
+      //Solicita el access token y refresh token al servicio de autenticación
       const respuesta = await iniciarSesion(
         email,
         password
       );
 
-      //Guarda el token después de que el login sea exitoso
+      // Guarda el access token y el refresh token
       localStorage.setItem(
-        'token',
-        respuesta.token
+        'accessToken',
+        respuesta.accessToken
       );
 
-      //Guarda la información del usuario en el localStorage
+      localStorage.setItem(
+        'refreshToken',
+        respuesta.refreshToken
+      );
+
+      // Guarda cuándo expira el access token
+      localStorage.setItem(
+        'expiracion',
+        (
+          Date.now() +
+          respuesta.expiresIn * 1000
+        ).toString()
+      );
+
+      // Guarda la información del usuario
       localStorage.setItem(
         'usuario',
         JSON.stringify(respuesta.usuario)
       );
 
+      // Elimina el token antiguo del Taller 1
+      localStorage.removeItem('token');
 
       onLogin();
 
@@ -45,6 +60,7 @@ export default function Login({ onLogin, onRegistrar }) {
     }
 
   }
+
 
 
   return (

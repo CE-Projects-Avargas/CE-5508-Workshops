@@ -1,3 +1,4 @@
+//conecta el backend solamente con backend-db
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 

@@ -11,5 +11,5 @@ COPY . .
 
 EXPOSE 5000
 
-#Para la API de autenticación, se ejecuta el archivo auth.py que contiene la lógica de registro y login de usuarios
+#Inicia la API Flask dentro del contenedor
 CMD ["python", "auth.py"]
