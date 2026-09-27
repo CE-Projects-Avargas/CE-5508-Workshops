@@ -164,7 +164,15 @@ app.post('/auth/refresh', async (req, res) => {
 
     // Rotacion donde el refresh usado queda invalidado de inmediato,
     // aunque no haya expirado en un solo uso por token.
-    await pool.execute('UPDATE RefreshTokens SET revoked_at = NOW() WHERE id = ?', [fila.id]);
+    // El UPDATE verifica y marca en una sola operacion atomica: si dos
+    // peticiones llegan con el mismo refresh, solo una cambia la fila.
+    const [resultado] = await pool.execute(
+      'UPDATE RefreshTokens SET revoked_at = NOW() WHERE id = ? AND revoked_at IS NULL AND expires_at > NOW()',
+      [fila.id]
+    );
+    if (resultado.affectedRows !== 1) {
+      return res.status(401).json({ error: 'Refresh token vencido o ya usado' });
+    }
 
     const par = await emitirPar({ id: fila.usuario_id, nombre: fila.nombre, email: fila.email });
     return res.status(200).json(par);
