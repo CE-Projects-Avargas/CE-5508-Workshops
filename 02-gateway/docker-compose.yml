@@ -114,6 +114,9 @@ services:
       DB_USER: auth_user
       DB_PASSWORD: auth_pass
       PORT: 4001
+      KEYS_DIR: /keys            # fuera de /app: nodemon no la vigila
+    volumes:
+      - auth_keys:/keys          # llaves RSA solo en este contenedor, persisten entre rebuilds
     ports:
       - "4001:4001"
     depends_on:
@@ -164,3 +167,4 @@ networks:
 volumes:
   auth_data:
   operacion_data:
+  auth_keys:
