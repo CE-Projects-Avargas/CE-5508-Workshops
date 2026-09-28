@@ -7,10 +7,15 @@ const ISSUER = 'cafetico-auth';
 const AUDIENCE = 'cafetico-api';
 const TOKEN_TYPE = 'access';
 
+// Caché de claves públicas.
+// key: kid
+// value: PEM
+const jwksCache = new Map();
+
 function jwkToPem(jwk) {
   const keyObject = crypto.createPublicKey({
     key: {
-      kty: 'RSA',
+      kty: jwk.kty,
       n: jwk.n,
       e: jwk.e
     },
@@ -23,7 +28,7 @@ function jwkToPem(jwk) {
   });
 }
 
-async function getPublicKey(kid) {
+async function cargarJWKS() {
   const response = await fetch(JWKS_URL);
 
   if (!response.ok) {
@@ -32,13 +37,41 @@ async function getPublicKey(kid) {
 
   const jwks = await response.json();
 
-  const jwk = jwks.keys.find(key => key.kid === kid);
-
-  if (!jwk) {
-    throw new Error(`No se encontró una clave con kid=${kid}`);
+  if (!jwks.keys || !Array.isArray(jwks.keys)) {
+    throw new Error('Respuesta JWKS inválida');
   }
 
-  return jwkToPem(jwk);
+  for (const jwk of jwks.keys) {
+    if (!jwk.kid) {
+      continue;
+    }
+
+    const publicKey = jwkToPem(jwk);
+
+    jwksCache.set(jwk.kid, publicKey);
+  }
+
+  console.log(
+    `JWKS actualizado. Claves en caché: ${jwksCache.size}`
+  );
+}
+
+async function getPublicKey(kid) {
+  // 1. Intentar utilizar la clave desde la caché.
+  if (jwksCache.has(kid)) {
+    return jwksCache.get(kid);
+  }
+
+  // 2. El kid no existe en caché.
+  //    Consultamos nuevamente el JWKS.
+  await cargarJWKS();
+
+  // 3. Revisamos nuevamente después de actualizar.
+  if (jwksCache.has(kid)) {
+    return jwksCache.get(kid);
+  }
+
+  throw new Error(`No se encontró una clave con kid=${kid}`);
 }
 
 module.exports = async function verificarToken(req, res, next) {
