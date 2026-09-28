@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS Usuarios (
 
 -- Contraseña de ambos: clave123
 INSERT INTO Usuarios (id, email, password, nombre) VALUES
-  (1, 'ana@hospital.cr',    '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Ana Rojas'),
-  (2, 'carlos@hospital.cr', '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Carlos Mena')
+  (1, 'ana@hospital.cr',    '$2b$10$9brYgUGg5MyhyHX9ZRfMcuCcGPKKY3ir08lAS/jz2uL4Ba8n3LgSu', 'Ana Rojas'),
+  (2, 'carlos@hospital.cr', '$2b$10$9brYgUGg5MyhyHX9ZRfMcuCcGPKKY3ir08lAS/jz2uL4Ba8n3LgSu', 'Carlos Mena')
 ON DUPLICATE KEY UPDATE email = VALUES(email);
 
 -- ── Principio de menor privilegio ──────────────────────────────

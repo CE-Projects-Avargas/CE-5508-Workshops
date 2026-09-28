@@ -1,93 +1,158 @@
-# Taller: Docker + Login
+# CE5508 — Taller 2: Identidad y puerta de entrada
 
-CE5508 - Arquitectura Orientada a Servicios aplicada a Sistemas Emergentes.
+## 1. Integrantes
 
-Sistema de gestión de proyectos de dispositivos médicos de misión crítica: frontend (React + Vite), backend (Node + Express + Sequelize) y base de datos (MariaDB), orquestados con Docker Compose.
+Maryuri Reyes - Mauro Navarro - Melina Porras
 
-## Qué ya funciona
+---
 
-- **Base de datos completa**: tablas `Usuarios` y `Proyectos` ya creadas (`database/init/01-schema.sql`), con datos de ejemplo (`02-seed.sql`).
-- **Backend — `GET /proyectos` y `POST /proyectos`**: totalmente funcionales (`backend/routes/proyectos.js`).
-- **Frontend — pantalla "Nuevo Proyecto"**: formulario funcional que crea proyectos y lista los existentes (`frontend/src/pages/NuevoProyecto.jsx`).
+## 2. Arquitectura
 
-## El reto de hoy
+El sistema utiliza un gateway como única entrada para el frontend:
 
-`auth-service/` está vacía. Ahí construyen, desde cero, un contenedor nuevo y separado del backend actual que hable con la misma base de datos MariaDB y resuelva el login: registrar un usuario y autenticarlo.
+```text
+Frontend
+   |
+   v
+Gateway :8080
+   |
+   +--> auth-service :4001 --> auth-db
+   |
+   +--> backend :4000 ------> operacion-db
+   |
+   +--> pump-service :4002 -> operacion-db
+```
 
-Cómo lo resuelvan es su decisión.
+- `auth-service` emite los JWT.
+- `backend` y `pump-service` validan los JWT mediante JWKS.
+- El gateway enruta las solicitudes y centraliza CORS.
+- `auth-db` y `operacion-db` están aisladas mediante redes y usuarios de base de datos.
 
-## Cómo levantar el proyecto
+### Autenticación
 
-Requiere [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo.
+Los access tokens utilizan:
+
+- RSA 2048
+- RS256
+- `kid`
+- `sub`
+- `iss`
+- `aud`
+- `exp`
+
+Los refresh tokens se almacenan como hash y se rotan al utilizarse.
+
+---
+
+## 3. Ejecución
+
+Desde `02-gateway`:
 
 ```bash
-git clone git@github.com:CE-Projects-Avargas/CE-5508-Workshops.git
-cd CE-5508-Workshops/01-docker-login
 docker compose up --build
 ```
 
-Esto levanta:
+Gateway:
 
-| Servicio | URL | Descripción |
-|---|---|---|
-| Frontend | http://localhost:5173 | React + Vite |
-| Backend | http://localhost:4000 | API REST — `/proyectos` |
-| MariaDB | localhost:3306 | usuario `root`, password `root123` |
+```text
+http://localhost:8080
+```
 
-Los volúmenes montan tu código local dentro del contenedor, así que los cambios que hagas en `backend/` o `frontend/` se reflejan al vuelo.
-
-Para apagar todo:
+Para detener el sistema:
 
 ```bash
 docker compose down
 ```
 
-Para apagar y borrar también los datos de la base de datos:
+---
 
-```bash
-docker compose down -v
+## 4. Endpoints principales
+
+### Registro
+
+```http
+POST /api/auth/register
 ```
 
-## Cómo probar lo que ya funciona
-
-```bash
-# Listar proyectos
-curl http://localhost:4000/proyectos
-
-# Crear un proyecto
-curl -X POST http://localhost:4000/proyectos \
-  -H "Content-Type: application/json" \
-  -d '{"nombre":"Desfibrilador X1","encargado":"Tu Nombre"}'
+```json
+{
+  "email": "usuario@test.cr",
+  "password": "clave123",
+  "nombre": "Usuario"
+}
 ```
 
-O abre http://localhost:5173 y usa el formulario "Nuevo Proyecto".
+### Login
 
-Para explorar la base de datos directamente:
-
-```bash
-docker compose exec mariadb mariadb -u root -p
-# password: root123
-MariaDB [(none)]> USE dispositivos_medicos;
-MariaDB [dispositivos_medicos]> SHOW TABLES;
-MariaDB [dispositivos_medicos]> SELECT * FROM Proyectos;
-MariaDB [dispositivos_medicos]> SELECT * FROM Usuarios;
+```http
+POST /api/auth/login
 ```
 
-## Estructura
+Devuelve:
 
-```
-01-docker-login/
-├── docker-compose.yml
-├── backend/            /proyectos — ya funciona completo
-├── auth-service/        vacía — el reto de hoy
-├── frontend/
-│   └── src/
-│       ├── pages/       NuevoProyecto.jsx (funciona)
-│       └── api.js
-└── database/
-    └── init/             scripts SQL que MariaDB ejecuta al primer arranque
+```json
+{
+  "accessToken": "...",
+  "refreshToken": "...",
+  "expiresIn": 900
+}
 ```
 
-## Variables de entorno
+### Refresh
 
-Cada servicio trae un `.env.example`. Docker Compose ya define las variables necesarias para desarrollo local — no necesitas crear archivos `.env` a mano para levantar el stack.
+```http
+POST /api/auth/refresh
+```
+
+```json
+{
+  "refreshToken": "..."
+}
+```
+
+### JWKS
+
+```http
+GET /api/auth/jwks
+```
+
+### Rutas protegidas
+
+Requieren:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+---
+
+## 5. Verificación
+
+| Prueba | Resultado esperado |
+|---|---|
+| Registro correcto | `201` |
+| Correo duplicado | `409` |
+| Login correcto | `200` |
+| Login incorrecto | `401` |
+| Solicitud sin token | `401` |
+| Token inválido | `401` |
+| Token expirado | `401` |
+| Token válido | Acceso permitido |
+| Refresh válido | Nuevo par de tokens |
+| Reutilización del refresh anterior | `401` |
+| Acceso directo al backend sin token | `401` |
+| Auth-service detenido | `502` desde gateway |
+| Rotación de clave | El JWKS conserva las claves necesarias |
+| Acceso entre bases no autorizadas | Denegado |
+
+---
+
+## 6. Seguridad
+
+- La clave privada RSA pertenece únicamente a `auth-service`.
+- Las claves RSA se almacenan en un volumen de Docker.
+- Las claves privadas no se incluyen en Git ni en las imágenes.
+- `backend` y `pump-service` validan los JWT mediante JWKS.
+- El gateway exige la presencia de `Authorization`, pero no valida la firma del JWT.
+- El endpoint de rotación de claves no está expuesto mediante el gateway.
+- Cada servicio utiliza su propio usuario de base de datos.

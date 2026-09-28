@@ -114,6 +114,9 @@ services:
       DB_USER: auth_user
       DB_PASSWORD: auth_pass
       PORT: 4001
+      KEYS_DIR: /keys            # fuera de /app: nodemon no la vigila
+    volumes:
+      - auth_keys:/keys          # llaves RSA solo en este contenedor, persisten entre rebuilds
     ports:
       - "4001:4001"
     depends_on:
@@ -132,7 +135,12 @@ services:
       DB_USER: pump_user         # permisos solo sobre Bombas, Productos y Eventos
       DB_PASSWORD: pump_pass
       BACKEND_URL: http://backend:4000
-      JWT_SECRET: secreto-compartido-del-taller
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
+      JWKS_CACHE_TTL_MS: 300000
+      JWKS_CACHE_MAX_ENTRIES: 5
+      JWKS_REQUESTS_PER_MINUTE: 10
       PORT: 4002
     ports: ["4002:4002"]
     depends_on:
@@ -164,3 +172,4 @@ networks:
 volumes:
   auth_data:
   operacion_data:
+  auth_keys:
