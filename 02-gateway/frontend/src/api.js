@@ -273,11 +273,12 @@ export async function eliminarBomba(id) {
   return body;
 }
 
-export async function iniciarBomba(id) {
+export async function iniciarBomba(id, datos) {
   const res = await fetchAutenticado(
     `${API_URL}/bombas/${id}/iniciar`,
     {
-      method: 'POST'
+      method: 'POST',
+      body: JSON.stringify(datos)
     }
   );
 
