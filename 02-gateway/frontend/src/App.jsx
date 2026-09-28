@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Login from './pages/Login.jsx';
 import Registro from './pages/Registro.jsx';
 import NuevoProyecto from './pages/NuevoProyecto.jsx';
@@ -16,6 +16,20 @@ export default function App() {
   const [usuario, setUsuario] = useState(leerUsuarioGuardado);
   const [pantalla, setPantalla] = useState('login');
   const [mensajeLogin, setMensajeLogin] = useState(null);
+
+  useEffect(() => {
+  function manejarSesionExpirada() {
+    setUsuario(null);
+    setPantalla('login');
+    setMensajeLogin('Tu sesión ha expirado. Inicia sesión nuevamente.');
+  }
+
+  window.addEventListener('sesion-expirada', manejarSesionExpirada);
+
+  return () => {
+    window.removeEventListener('sesion-expirada', manejarSesionExpirada);
+  };
+}, []);
 
   function manejarLoginExitoso(usuarioAutenticado) {
     /**
@@ -46,14 +60,13 @@ export default function App() {
     setPantalla('login');
   }
 
-  function cerrarSesion() {
-    localStorage.removeItem('usuario');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+  function eliminarSesion() {
+  localStorage.removeItem('usuario');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
 
-    setUsuario(null);
-    setPantalla('login');
-  }
+  window.dispatchEvent(new Event('sesion-expirada'));
+}
 
   // Sin usuario autenticado: solo se puede ver login o registro.
   // Con usuario autenticado: se pasa a la pantalla de proyectos.

@@ -8,6 +8,17 @@ function obtenerAccessToken() {
   return localStorage.getItem('accessToken');
 }
 
+function guardarTokens(accessToken, refreshToken) {
+  localStorage.setItem('access_token', accessToken);
+  localStorage.setItem('refresh_token', refreshToken);
+}
+
+function eliminarSesion() {
+  localStorage.removeItem('usuario');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+}
+
 /**
   * Construye los headers para una petición autenticada.
   * Si existe un access token, se agrega:
@@ -22,22 +33,90 @@ function obtenerHeadersAutenticados() {
   };
 }
 
+async function refrescarTokens() {
+  const refreshToken = localStorage.getItem('refresh_token');
+
+  if (!refreshToken) {
+    eliminarSesion();
+    throw new Error('No existe un refresh token');
+  }
+
+  const res = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      refresh_token: refreshToken
+    })
+  });
+
+  const body = await res.json();
+
+  if (!res.ok) {
+    eliminarSesion();
+    throw new Error(
+      body.detail || body.error || 'La sesión ha expirado'
+    );
+  }
+
+  guardarTokens(
+    body.access_token,
+    body.refresh_token
+  );
+
+  return body;
+}
+
+async function fetchAutenticado(url, opciones = {}) {
+  const opcionesIniciales = {
+    ...opciones,
+    headers: {
+      ...obtenerHeadersAutenticados(),
+      ...(opciones.headers || {})
+    }
+  };
+
+  let res = await fetch(url, opcionesIniciales);
+
+  if (res.status !== 401) {
+    return res;
+  }
+
+  try {
+    await refrescarTokens();
+  } catch {
+    throw new Error(
+      'La sesión ha expirado. Inicie sesión nuevamente.'
+    );
+  }
+
+  const opcionesReintento = {
+    ...opciones,
+    headers: {
+      ...obtenerHeadersAutenticados(),
+      ...(opciones.headers || {})
+    }
+  };
+
+  return fetch(url, opcionesReintento);
+}
+
 /**
   * Crea un nuevo proyecto.
   * Endpoint protegido: requiere access token.
   */
 
 export async function crearProyecto(datos) {
-  const res = await fetch(`${API_URL}/proyectos`, {
+  const res = await fetchAutenticado(`${API_URL}/proyectos`, {
     method: 'POST',
-    headers: obtenerHeadersAutenticados(),
     body: JSON.stringify(datos)
   });
 
   const body = await res.json();
 
   if (!res.ok) {
-    throw new Error(body.error || 'Error al crear el proyecto');
+    throw new Error(body.error || body.detail || 'Error al crear el proyecto');
   }
 
   return body;
@@ -49,14 +128,14 @@ export async function crearProyecto(datos) {
   */
 
 export async function listarProyectos() {
-  const res = await fetch(`${API_URL}/proyectos`, {
-    headers: obtenerHeadersAutenticados()
+  const res = await fetchAutenticado(`${API_URL}/proyectos`, {
+    method: 'GET'
   });
 
   const body = await res.json();
 
   if (!res.ok) {
-    throw new Error(body.error || 'Error al listar proyectos');
+    throw new Error(body.error || body.detail || 'Error al listar proyectos');
   }
 
   return body;
