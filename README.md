@@ -14,6 +14,7 @@ Cada carpeta es un taller independiente: trae su propio `README.md` con instrucc
 | Carpeta | Tema |
 |---|---|
 | [`01-docker-login`](01-docker-login/) | Docker + Docker Compose, API REST con Node/Express/Sequelize, MariaDB, autenticación con JWT |
+| [`02-gateway`](02-gateway/) | Identidad y la puerta de entrada |
 
 ## Cómo usar este repositorio
 
