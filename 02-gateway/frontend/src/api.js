@@ -332,6 +332,24 @@ export async function pausarBomba(id) {
   return body;
 }
 
+export async function detenerBomba(id) {
+  const res = await fetchAutenticado(
+    `${API_URL}/bombas/${id}/detener`,
+    {
+      method: 'POST'
+    }
+  );
+
+  const body = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      body.error || body.detail || 'Error al detener la bomba'
+    );
+  }
+
+  return body;
+}
 
 export async function listarProductos() {
   const res = await fetchAutenticado(`${API_URL}/productos`, {

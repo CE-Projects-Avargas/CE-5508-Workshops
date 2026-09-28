@@ -5,7 +5,10 @@ import {
     crearBomba, 
     editarBomba, 
     programarBomba, 
-    iniciarBomba 
+    iniciarBomba,
+    pausarBomba,
+    detenerBomba,
+    eliminarBomba
 } from '../api.js';
 
 export default function Bombas({ proyectoId }) {
@@ -271,16 +274,81 @@ export default function Bombas({ proyectoId }) {
         }
     }
 
-    if (cargando) {
-        return <p>Cargando bombas...</p>;
+    async function manejarPausarBomba(id) {
+        setGuardando(true);
+        setMensaje(null);
+
+        try {
+            await pausarBomba(id);
+            setMensaje({
+                tipo: 'exito',
+                texto: `Bomba #${id} pausada correctamente.`
+            });
+            await cargarBombas();
+        } catch (err) {
+            setMensaje({
+                tipo: 'error',
+                texto: err.message
+            });
+        } finally {
+            setGuardando(false);
+        }
     }
 
-    if (mensaje) {
-        return (
-        <div className={`mensaje ${mensaje.tipo}`}>
-            {mensaje.texto}
-        </div>
+    async function manejarPausarBomba(id) {
+        setGuardando(true);
+        setMensaje(null);
+        try {
+            await pausarBomba(id);
+            setMensaje({
+                tipo: 'exito',
+                texto: `Bomba #${id} pausada correctamente.`
+            });
+            await cargarBombas();
+        } catch (err) {
+            setMensaje({
+                tipo: 'error',
+                texto: err.message
+            });
+        } finally {
+            setGuardando(false);
+        }
+    }
+
+    async function manejarEliminarBomba(id) {
+        const confirmar = window.confirm(
+            `¿Está seguro de que desea eliminar la bomba #${id}?`
         );
+
+        if (!confirmar) {
+            return;
+        }
+
+        setGuardando(true);
+        setMensaje(null);
+
+        try {
+            await eliminarBomba(id);
+
+            setMensaje({
+                tipo: 'exito',
+                texto: `Bomba #${id} eliminada correctamente.`
+            });
+
+            await cargarBombas();
+
+        } catch (err) {
+            setMensaje({
+                tipo: 'error',
+                texto: err.message
+            });
+        } finally {
+            setGuardando(false);
+        }
+    }
+
+    if (cargando) {
+        return <p>Cargando bombas...</p>;
     }
 
     return (
@@ -306,29 +374,45 @@ export default function Bombas({ proyectoId }) {
                 {bombas.map((bomba) => (
                     <div className="proyecto-card bomba-card" key={bomba.id}>
                         <h3>Bomba #{bomba.id}</h3>
-
                         <span className="badge">{bomba.estado}</span>
-
                         <p><strong>Serie:</strong>{bomba.serie}</p>
-
                         <p><strong>Producto:</strong>{' '}{bomba.producto?.nombre || bomba.productoId}</p>
-
                         <p><strong>Ubicación:</strong> {bomba.ubicacion}</p>
-
                         <p><strong>Caudal:</strong> {bomba.caudalMlH} ml/h</p>
-
                         <p><strong>Volumen objetivo:</strong>{' '}{bomba.volumenObjetivoMl} ml</p>
-
                         <p><strong>Volumen entregado:</strong>{' '}{bomba.volumenEntregadoMl} ml</p>
-
                         {bomba.programadaPara && (
                             <small>Programada para: {bomba.programadaPara}</small>
                         )}
-
                         <div className="bomba-acciones"> 
                             <button type="button" onClick={() => abrirEditar(bomba)} > Editar </button> 
                             <button type="button" onClick={() => abrirProgramar(bomba)} > Programar </button> 
                             <button type="button" onClick={() => abrirIniciar(bomba)} > Iniciar </button> 
+                            {bomba.estado === 'infundiendo' && (
+                                <button
+                                    type="button"
+                                    onClick={() => manejarPausarBomba(bomba.id)}
+                                    disabled={guardando}
+                                >
+                                    Pausar
+                                </button>
+                            )}
+                            {bomba.estado !== 'detenida' && (
+                                <button
+                                    type="button"
+                                    onClick={() => manejarDetenerBomba(bomba.id)}
+                                    disabled={guardando}
+                                >
+                                    Detener
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => manejarEliminarBomba(bomba.id)}
+                                disabled={guardando}
+                            >
+                                Eliminar
+                            </button>
                         </div>
 
                     </div>
