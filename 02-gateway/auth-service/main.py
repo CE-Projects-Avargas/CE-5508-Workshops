@@ -1,7 +1,6 @@
 import os
-
 import mysql.connector # type: ignore
-from fastapi import FastAPI, HTTPException # type: ignore
+from fastapi import FastAPI, HTTPException, Header # type: ignore
 from pydantic import BaseModel # type: ignore
 import bcrypt # type: ignore
 import jwt 
@@ -349,4 +348,63 @@ def refresh_token(request: RefreshRequest):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token
+    }
+
+
+# --------------------------------------------------
+# VERIFY ACCESS TOKEN
+# --------------------------------------------------
+
+@app.get("/verify")
+def verify_token(authorization: str | None = Header(default=None)):
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header requerido"
+        )
+
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header inválido"
+        )
+
+    token = authorization[len("Bearer "):].strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token requerido"
+        )
+
+    try:
+        payload = jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token expirado"
+        )
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Access token inválido"
+        )
+
+    if payload.get("type") != ACCESS_TOKEN_TYPE:
+        raise HTTPException(
+            status_code=401,
+            detail="El token no es un access token"
+        )
+
+    return {
+        "valid": True,
+        "sub": payload.get("sub")
     }
