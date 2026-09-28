@@ -29,30 +29,41 @@ export default function App() {
   return () => {
     window.removeEventListener('sesion-expirada', manejarSesionExpirada);
   };
-}, []);
+  }, []);
 
-  function manejarLoginExitoso(usuarioAutenticado) {
-    /**
-     * La respuesta del auth-service tiene la siguiente estructura:
-     *
-     * {
-     * authenticated: true,
-     * message: "Login exitoso",
-     * access_token: "...",
-     * refresh_token: "...",
-     * user: {
-     * id: ...,
-     * email: "...",
-     * nombre: "..."
-     * }
-     * }
-    */
-  
-    localStorage.setItem('usuario', JSON.stringify(usuarioAutenticado.usuario));
-    localStorage.setItem('accessToken', usuarioAutenticado.accessToken);
-    localStorage.setItem('refreshToken', usuarioAutenticado.refreshToken);
+  function manejarLoginExitoso(respuestaLogin) {
+  /**
+   * La respuesta del auth-service tiene la siguiente estructura:
+   *
+   * {
+   *   authenticated: true,
+   *   message: "Login exitoso",
+   *   access_token: "...",
+   *   refresh_token: "...",
+   *   user: {
+   *     id: ...,
+   *     email: "...",
+   *     nombre: "..."
+   *   }
+   * }
+   */
 
-    setUsuario(usuarioAutenticado.usuario);
+    localStorage.setItem(
+      'usuario',
+      JSON.stringify(respuestaLogin.user)
+    );
+
+    localStorage.setItem(
+      'access_token',
+      respuestaLogin.access_token
+    );
+
+    localStorage.setItem(
+      'refresh_token',
+      respuestaLogin.refresh_token
+    );
+
+    setUsuario(respuestaLogin.user);
   }
 
   function manejarRegistroExitoso(mensaje) {
@@ -60,13 +71,14 @@ export default function App() {
     setPantalla('login');
   }
 
-  function eliminarSesion() {
-  localStorage.removeItem('usuario');
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
+  function cerrarSesion() {
+    localStorage.removeItem('usuario');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
 
-  window.dispatchEvent(new Event('sesion-expirada'));
-}
+    setUsuario(null);
+    setPantalla('login');
+  }
 
   // Sin usuario autenticado: solo se puede ver login o registro.
   // Con usuario autenticado: se pasa a la pantalla de proyectos.
