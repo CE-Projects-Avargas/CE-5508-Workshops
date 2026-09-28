@@ -18,8 +18,27 @@ export default function App() {
   const [mensajeLogin, setMensajeLogin] = useState(null);
 
   function manejarLoginExitoso(usuarioAutenticado) {
-    localStorage.setItem('usuario', JSON.stringify(usuarioAutenticado));
-    setUsuario(usuarioAutenticado);
+    /**
+     * La respuesta del auth-service tiene la siguiente estructura:
+     *
+     * {
+     * authenticated: true,
+     * message: "Login exitoso",
+     * access_token: "...",
+     * refresh_token: "...",
+     * user: {
+     * id: ...,
+     * email: "...",
+     * nombre: "..."
+     * }
+     * }
+    */
+  
+    localStorage.setItem('usuario', JSON.stringify(usuarioAutenticado.usuario));
+    localStorage.setItem('accessToken', usuarioAutenticado.accessToken);
+    localStorage.setItem('refreshToken', usuarioAutenticado.refreshToken);
+
+    setUsuario(usuarioAutenticado.usuario);
   }
 
   function manejarRegistroExitoso(mensaje) {
@@ -29,6 +48,9 @@ export default function App() {
 
   function cerrarSesion() {
     localStorage.removeItem('usuario');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+
     setUsuario(null);
     setPantalla('login');
   }
