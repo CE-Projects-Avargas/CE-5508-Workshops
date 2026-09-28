@@ -4,7 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
   * Obtiene el access token almacenado en la sesión actual.
   */
 function obtenerAccessToken() {
-  return localStorage.getItem('accessToken');
+  return localStorage.getItem('access_token');
 }
 
 function guardarTokens(accessToken, refreshToken) {
@@ -69,6 +69,8 @@ async function refrescarTokens() {
   return body;
 }
 
+let refreshEnProgreso = null;
+
 async function fetchAutenticado(url, opciones = {}) {
   const opcionesIniciales = {
     ...opciones,
@@ -85,7 +87,14 @@ async function fetchAutenticado(url, opciones = {}) {
   }
 
   try {
-    await refrescarTokens();
+    if (!refreshEnProgreso) {
+      refreshEnProgreso = refrescarTokens()
+        .finally(() => {
+          refreshEnProgreso = null;
+        });
+    }
+
+    await refreshEnProgreso;
   } catch {
     throw new Error(
       'La sesión ha expirado. Inicie sesión nuevamente.'
@@ -182,16 +191,16 @@ export async function iniciarSesion(credenciales) {
   return body;
 }
 
-export async function listarBombas() {
-  const res = await fetchAutenticado(`${API_URL}/bombas`, {
-    method: 'GET'
-  });
+export async function listarBombas(proyectoId) {
+  const res = await fetchAutenticado(
+    `${API_URL}/bombas?proyectoId=${proyectoId}`
+  );
 
   const body = await res.json();
 
   if (!res.ok) {
     throw new Error(
-      body.error || body.detail || 'Error al listar las bombas'
+      body.detail || body.error || 'Error al listar bombas'
     );
   }
 

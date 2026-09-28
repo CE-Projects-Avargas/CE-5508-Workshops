@@ -95,6 +95,9 @@ services:
     depends_on:
       operacion-db:
         condition: service_healthy
+    volumes:
+    - ./pump-service:/app
+    - /app/node_modules
     networks:
       - interna
       - datos-operacion
