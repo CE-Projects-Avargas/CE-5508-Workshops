@@ -6,24 +6,39 @@ const Proyecto = sequelize.define('Proyecto', {
     type: DataTypes.STRING,
     allowNull: false
   },
+
   encargado: {
     type: DataTypes.STRING,
     allowNull: false
   },
+
+  ownerId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+
   descripcion: {
     type: DataTypes.TEXT,
     allowNull: true
   },
+
   tipoDispositivo: {
     type: DataTypes.STRING,
     allowNull: true
   },
+
   criticidad: {
     type: DataTypes.ENUM('bajo', 'medio', 'alto', 'critico'),
     defaultValue: 'medio'
   },
+
   estado: {
-    type: DataTypes.ENUM('planificacion', 'desarrollo', 'pruebas', 'produccion'),
+    type: DataTypes.ENUM(
+      'planificacion',
+      'desarrollo',
+      'pruebas',
+      'produccion'
+    ),
     defaultValue: 'planificacion'
   }
 });

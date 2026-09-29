@@ -2,15 +2,25 @@ const express = require('express');
 require('dotenv').config();
 
 const sequelize = require('./db');
+const verificarToken = require('./auth');
 
 const app = express();
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller Docker + Login' });
+  res.json({
+    status: 'ok',
+    servicio: 'CE5508 - Taller identidad y la puerta de entrada'
+  });
 });
 
-app.use('/proyectos', require('./routes/proyectos'));
+app.use(
+  '/proyectos',
+  verificarToken,
+  require('./routes/proyectos')
+);
+
+app.use('/proyectos', verificarToken, require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;
 

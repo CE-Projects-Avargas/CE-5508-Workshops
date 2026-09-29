@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Login from './pages/Login.jsx';
 import Registro from './pages/Registro.jsx';
 import NuevoProyecto from './pages/NuevoProyecto.jsx';
@@ -17,9 +17,53 @@ export default function App() {
   const [pantalla, setPantalla] = useState('login');
   const [mensajeLogin, setMensajeLogin] = useState(null);
 
-  function manejarLoginExitoso(usuarioAutenticado) {
-    localStorage.setItem('usuario', JSON.stringify(usuarioAutenticado));
-    setUsuario(usuarioAutenticado);
+  useEffect(() => {
+  function manejarSesionExpirada() {
+    setUsuario(null);
+    setPantalla('login');
+    setMensajeLogin('Tu sesión ha expirado. Inicia sesión nuevamente.');
+  }
+
+  window.addEventListener('sesion-expirada', manejarSesionExpirada);
+
+  return () => {
+    window.removeEventListener('sesion-expirada', manejarSesionExpirada);
+  };
+  }, []);
+
+  function manejarLoginExitoso(respuestaLogin) {
+  /**
+   * La respuesta del auth-service tiene la siguiente estructura:
+   *
+   * {
+   *   authenticated: true,
+   *   message: "Login exitoso",
+   *   access_token: "...",
+   *   refresh_token: "...",
+   *   user: {
+   *     id: ...,
+   *     email: "...",
+   *     nombre: "..."
+   *   }
+   * }
+   */
+
+    localStorage.setItem(
+      'usuario',
+      JSON.stringify(respuestaLogin.user)
+    );
+
+    localStorage.setItem(
+      'access_token',
+      respuestaLogin.access_token
+    );
+
+    localStorage.setItem(
+      'refresh_token',
+      respuestaLogin.refresh_token
+    );
+
+    setUsuario(respuestaLogin.user);
   }
 
   function manejarRegistroExitoso(mensaje) {
@@ -29,6 +73,9 @@ export default function App() {
 
   function cerrarSesion() {
     localStorage.removeItem('usuario');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+
     setUsuario(null);
     setPantalla('login');
   }

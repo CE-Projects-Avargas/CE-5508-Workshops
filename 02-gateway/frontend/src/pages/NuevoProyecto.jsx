@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { crearProyecto, listarProyectos } from '../api.js';
+import Bombas from './Bombas.jsx';
 
 const ESTADO_INICIAL = {
   nombre: '',
@@ -73,6 +74,7 @@ export default function NuevoProyecto() {
           <span className="badge">{p.estado}</span>
           <p>{p.descripcion}</p>
           <small>Encargado: {p.encargado}</small>
+          <Bombas proyectoId={p.id} />
         </div>
       ))}
     </>
