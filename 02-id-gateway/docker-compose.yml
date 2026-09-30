@@ -63,8 +63,10 @@ services:
       DB_USER: auth_user
       DB_PASSWORD: auth_pass
       PORT: 5001
-      JWT_SECRET: dev-secret-ce5508-cambialo   # se elimina en el paso 2
-      JWT_EXPIRA_MIN: 60
+      KEYS_DIR: /keys
+      JWT_ISSUER: ce5508-auth-service
+      JWT_AUDIENCE: ce5508-backend
+      ACCESS_TTL_MIN: 15
     ports:
       - "5001:5001"
     depends_on:
@@ -72,6 +74,7 @@ services:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+      - auth_keys:/keys        # clave PRIVADA: se monta SOLO aqui
     networks: [interna, datos-auth]
 
   frontend:
@@ -98,3 +101,4 @@ networks:
 volumes:
   backend_db_data:
   auth_db_data:
+  auth_keys:

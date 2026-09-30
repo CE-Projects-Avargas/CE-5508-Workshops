@@ -1,12 +1,7 @@
-"""auth-service — registro y login de usuarios con JWT (CE5508).
+"""auth-service: la UNICA oficina que emite carnets (CE5508, Taller 2).
 
-Contenedor separado del backend de /proyectos, pero habla con la misma
-MariaDB y usa la tabla `Usuarios` que ya crea database/init/01-schema.sql:
-
-    id, email, password, nombre, createdAt, updatedAt
-
-Las contrasenas se guardan hasheadas (werkzeug / PBKDF2), nunca en claro.
-`/login` devuelve un JWT firmado; `/me` valida ese token.
+Firma los JWT con una clave PRIVADA RSA que solo este servicio tiene.
+Los demas los comprueban con la PUBLICA, publicada en GET /auth/jwks.
 """
 import datetime
 import os
@@ -17,47 +12,70 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import claves as gestor_claves
 from db import esperar_base_de_datos, get_connection
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # temporal: en el paso 5 CORS pasa al gateway
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-ce5508-cambialo")
-JWT_ALGORITMO = "HS256"
-JWT_EXPIRA_MIN = int(os.getenv("JWT_EXPIRA_MIN", "60"))
+JWT_ISSUER = os.getenv("JWT_ISSUER", "ce5508-auth-service")
+JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "ce5508-backend")
+ACCESS_TTL_MIN = int(os.getenv("ACCESS_TTL_MIN", "15"))
+
+# Se cargan (o se generan si no hay) una vez al arrancar.
+CLAVES = gestor_claves.cargar_claves()
 
 
-def generar_token(usuario):
-    """Firma un JWT con los datos del usuario y una expiracion."""
+def generar_access_token(usuario):
+    """JWT corto, firmado con RS256 y la clave privada activa."""
+    kid, privada = gestor_claves.clave_activa(CLAVES)
     ahora = datetime.datetime.now(datetime.timezone.utc)
     payload = {
-        "sub": usuario["id"],
+        "iss": JWT_ISSUER,               # quien lo emite
+        "aud": JWT_AUDIENCE,             # para quien es
+        "sub": str(usuario["id"]),       # de quien es (el RFC pide texto)
         "email": usuario["email"],
         "nombre": usuario["nombre"],
         "iat": ahora,
-        "exp": ahora + datetime.timedelta(minutes=JWT_EXPIRA_MIN),
+        "exp": ahora + datetime.timedelta(minutes=ACCESS_TTL_MIN),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITMO)
+    # El kid va en la CABECERA del token: dice con cual clave se firmo.
+    return jwt.encode(payload, privada, algorithm="RS256", headers={"kid": kid})
 
 
-def usuario_desde_token():
-    """Lee 'Authorization: Bearer <token>' y devuelve el payload, o None."""
+def payload_desde_header():
+    """Valida 'Authorization: Bearer <token>': firma, exp, iss y aud."""
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         return None
-    token = header.split(" ", 1)[1]
+    token = header[7:]
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITMO])
-    except jwt.PyJWTError:
+        kid = jwt.get_unverified_header(token).get("kid")
+        publica = next(p.public_key() for k, p in CLAVES if k == kid)
+        return jwt.decode(
+            token,
+            publica,
+            algorithms=["RS256"],
+            issuer=JWT_ISSUER,
+            audience=JWT_AUDIENCE,
+            options={"require": ["exp", "iss", "aud", "sub"]},
+        )
+    except (jwt.PyJWTError, StopIteration):
         return None
 
 
 @app.get("/")
 def health():
-    return jsonify(status="ok", servicio="CE5508 - Auth Service (Flask + JWT)")
+    return jsonify(status="ok", servicio="CE5508 - Auth Service (RS256 + JWKS)")
 
 
-@app.post("/register")
+@app.get("/auth/jwks")
+def jwks():
+    """Publico, sin token. Solo claves PUBLICAS."""
+    return jsonify(gestor_claves.jwks(CLAVES))
+
+
+@app.post("/auth/register")
 def register():
     datos = request.get_json(silent=True) or {}
     email = (datos.get("email") or "").strip().lower()
@@ -67,14 +85,12 @@ def register():
     if not email or not password or not nombre:
         return jsonify(error="email, password y nombre son obligatorios"), 400
 
-    hash_password = generate_password_hash(password)
-
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO Usuarios (email, password, nombre) VALUES (%s, %s, %s)",
-                (email, hash_password, nombre),
+                (email, generate_password_hash(password), nombre),
             )
             user_id = cur.lastrowid
     except pymysql.err.IntegrityError:
@@ -85,7 +101,7 @@ def register():
     return jsonify(id=user_id, email=email, nombre=nombre), 201
 
 
-@app.post("/login")
+@app.post("/auth/login")
 def login():
     datos = request.get_json(silent=True) or {}
     email = (datos.get("email") or "").strip().lower()
@@ -108,34 +124,26 @@ def login():
     if not usuario or not check_password_hash(usuario["password"], password):
         return jsonify(error="credenciales invalidas"), 401
 
-    datos_publicos = {
-        "id": usuario["id"],
-        "email": usuario["email"],
-        "nombre": usuario["nombre"],
-    }
+    datos_publicos = {"id": usuario["id"], "email": usuario["email"], "nombre": usuario["nombre"]}
     return jsonify(
-        mensaje="login correcto",
-        token=generar_token(datos_publicos),
+        accessToken=generar_access_token(datos_publicos),
+        expiresIn=ACCESS_TTL_MIN * 60,   # segundos
         usuario=datos_publicos,
     )
 
 
-@app.get("/me")
+@app.get("/auth/me")
 def me():
-    """Valida el JWT del header Authorization y devuelve el usuario."""
-    payload = usuario_desde_token()
+    payload = payload_desde_header()
     if not payload:
         return jsonify(error="token invalido o ausente"), 401
     return jsonify(
-        usuario={
-            "id": payload["sub"],
-            "email": payload["email"],
-            "nombre": payload["nombre"],
-        }
+        usuario={"id": int(payload["sub"]), "email": payload["email"], "nombre": payload["nombre"]}
     )
 
 
 if __name__ == "__main__":
     esperar_base_de_datos()
     puerto = int(os.getenv("PORT", "5001"))
-    app.run(host="0.0.0.0", port=puerto, debug=True)
+    # use_reloader: recarga al guardar cambios. debug=False: sin depurador expuesto.
+    app.run(host="0.0.0.0", port=puerto, debug=False, use_reloader=True)
