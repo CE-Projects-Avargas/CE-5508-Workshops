@@ -1,41 +1,49 @@
-import { cerrarSesion, leerToken } from './auth.js';
+import { API_URL, cerrarSesion, leerToken, refrescarSesion } from './auth.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// Todas las peticiones van al gateway (una sola URL) con el access token.
+async function pedirConToken(ruta, opciones = {}) {
+  const hacer = () =>
+    fetch(`${API_URL}${ruta}`, {
+      ...opciones,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(leerToken() ? { Authorization: `Bearer ${leerToken()}` } : {})
+      }
+    });
 
-// Cabeceras con el JWT del auth-service, si hay sesión.
-function cabeceras() {
-  const h = { 'Content-Type': 'application/json' };
-  const token = leerToken();
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
-}
+  let res = await hacer();
 
-// El backend responde 401 si el token falta o expiró: cerramos sesión
-// y recargamos para volver al login.
-function siExpiro(res) {
+  // 401: el access vencio (dura 15 min). Se renueva con el refresh y se
+  // reintenta UNA vez. Si el refresh tampoco sirve, se vuelve al login.
   if (res.status === 401) {
-    cerrarSesion();
-    window.location.reload();
-    throw new Error('Sesión expirada, vuelve a iniciar sesión');
+    const nueva = await refrescarSesion();
+    if (!nueva) {
+      cerrarSesion();
+      window.location.reload();
+      throw new Error('Sesión expirada, vuelve a iniciar sesión');
+    }
+    res = await hacer();
   }
-}
 
-export async function crearProyecto(datos) {
-  const res = await fetch(`${API_URL}/proyectos`, {
-    method: 'POST',
-    headers: cabeceras(),
-    body: JSON.stringify(datos)
-  });
-  siExpiro(res);
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || 'Error al crear el proyecto');
+  let body = null;
+  try {
+    body = res.status === 204 ? null : await res.json();
+  } catch {
+    body = { error: `Error ${res.status}` };
+  }
+  // 403: la identidad es valida pero no tiene permiso. NO se cierra sesion.
+  if (!res.ok) throw new Error(body?.error || `Error ${res.status}`);
   return body;
 }
 
-export async function listarProyectos() {
-  const res = await fetch(`${API_URL}/proyectos`, { headers: cabeceras() });
-  siExpiro(res);
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || 'Error al listar proyectos');
-  return body;
+export function crearProyecto(datos) {
+  return pedirConToken('/proyectos', { method: 'POST', body: JSON.stringify(datos) });
+}
+
+export function listarProyectos() {
+  return pedirConToken('/proyectos');
+}
+
+export function eliminarProyecto(id) {
+  return pedirConToken(`/proyectos/${id}`, { method: 'DELETE' });
 }

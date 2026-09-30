@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import Login from './pages/Login.jsx';
 import NuevoProyecto from './pages/NuevoProyecto.jsx';
-import { cerrarSesion, guardarSesion, leerSesion, verificarSesion } from './auth.js';
+import { cerrarSesion, guardarSesion, leerSesion, logout, verificarSesion } from './auth.js';
 
 export default function App() {
   const [usuario, setUsuario] = useState(() => leerSesion()?.usuario || null);
   const [verificando, setVerificando] = useState(true);
 
-  // Al cargar, valida el JWT guardado contra el auth-service (/me).
-  // Si expiró o no es válido, se limpia la sesión y vuelve al login.
+  // Al cargar, valida el access guardado contra auth-service (/api/auth/me).
+  // Si venció intenta renovarlo con el refresh; si tampoco sirve, vuelve al login.
   useEffect(() => {
     verificarSesion()
       .then((u) => {
@@ -27,8 +27,9 @@ export default function App() {
     setUsuario(sesion.usuario);
   }
 
-  function salir() {
-    cerrarSesion();
+  // Cerrar sesion revoca el refresh en auth-service, no solo borra localStorage.
+  async function salir() {
+    await logout();
     setUsuario(null);
   }
 
@@ -56,7 +57,7 @@ export default function App() {
           Cerrar sesión
         </button>
       </div>
-      <NuevoProyecto />
+      <NuevoProyecto usuario={usuario} />
     </main>
   );
 }

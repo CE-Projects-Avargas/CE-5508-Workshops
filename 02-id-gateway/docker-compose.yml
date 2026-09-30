@@ -1,75 +1,132 @@
 services:
-  mariadb:
+
+  # ===== ENTRADA: la unica puerta =====
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
+      - ./gateway/exigir-token.conf:/etc/nginx/exigir-token.conf:ro
+    depends_on:                  # la puerta abre cuando los servicios estan sanos
+      auth-service:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks: [borde, interna]
+
+  # ===== DATOS: una base por servicio, cada una en su propia red =====
+  backend-db:
     image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: dispositivos_medicos
-    ports:
-      - "3306:3306"
+      MARIADB_ROOT_PASSWORD: root123
     volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d
+      - backend_db_data:/var/lib/mysql
+      - ./backend-db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks: [datos-backend]
+    # Sin "ports": no se expone fuera de Docker
 
+  auth-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - auth_db_data:/var/lib/mysql
+      - ./auth-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [datos-auth]
+
+  # ===== SERVICIOS =====
   backend:
     build: ./backend
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: backend-db
       DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
-      DB_USER: root
-      DB_PASSWORD: root123
+      DB_NAME: operacion
+      DB_USER: backend_user
+      DB_PASSWORD: backend_pass
       PORT: 4000
-      JWT_SECRET: dev-secret-ce5508-cambialo
+      JWKS_URL: http://auth-service:5001/auth/jwks   # por la red "interna"
+      JWT_ISSUER: ce5508-auth-service
+      JWT_AUDIENCE: ce5508-backend
     ports:
-      - "4000:4000"
+      - "4000:4000"   # expuesto A PROPOSITO para probar el Req 4 (saltarse la puerta)
+    healthcheck:                 # sano = responde en su puerto (wget viene en alpine)
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4000/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     depends_on:
-      mariadb:
+      backend-db:
         condition: service_healthy
     volumes:
       - ./backend:/app
       - /app/node_modules
+    networks: [interna, datos-backend]
 
   auth-service:
     build: ./auth-service
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: auth-db
       DB_PORT: 3306
-      DB_NAME: dispositivos_medicos
-      DB_USER: root
-      DB_PASSWORD: root123
+      DB_NAME: auth
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
       PORT: 5001
-      JWT_SECRET: dev-secret-ce5508-cambialo
-      JWT_EXPIRA_MIN: 60
-    ports:
-      - "5001:5001"
+      KEYS_DIR: /keys
+      JWT_ISSUER: ce5508-auth-service
+      JWT_AUDIENCE: ce5508-backend
+      ACCESS_TTL_MIN: 15
+      REFRESH_TTL_H: 8
+    healthcheck:                 # sano = responde en su puerto (la imagen slim no trae curl)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     depends_on:
-      mariadb:
+      auth-db:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+      - auth_keys:/keys        # clave PRIVADA: se monta SOLO aqui
+    networks: [interna, datos-auth]
 
   frontend:
     build: ./frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:4000
-      VITE_AUTH_URL: http://localhost:5001
+      VITE_API_URL: http://localhost:8080/api   # UNA sola direccion: la puerta
     ports:
       - "5173:5173"
-    depends_on:
-      - backend
-      - auth-service
+    depends_on: [gateway]
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks: [borde]
+
+# Redes: cada servicio solo alcanza lo que necesita.
+networks:
+  borde:          # navegador <-> gateway (el gateway llega en el paso 5)
+  interna:        # gateway <-> servicios
+  datos-auth:     # SOLO auth-service <-> auth-db
+  datos-backend:  # SOLO backend <-> backend-db
 
 volumes:
-  mariadb_data:
+  backend_db_data:
+  auth_db_data:
+  auth_keys:

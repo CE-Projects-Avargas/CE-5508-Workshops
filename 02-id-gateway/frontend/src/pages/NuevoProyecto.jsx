@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { crearProyecto, listarProyectos } from '../api.js';
+import { crearProyecto, eliminarProyecto, listarProyectos } from '../api.js';
 
 const ESTADO_INICIAL = {
   nombre: '',
   encargado: ''
 };
 
-// Esta pantalla ya funciona completo — es tu ejemplo de referencia
-// de cómo el frontend consume el backend con fetch.
-export default function NuevoProyecto() {
+// Consume el backend a traves del gateway (una sola URL) con el access token.
+// "Eliminar" sirve para ver el 403: solo el dueño del proyecto puede borrarlo.
+export default function NuevoProyecto({ usuario }) {
   const [form, setForm] = useState(ESTADO_INICIAL);
   const [proyectos, setProyectos] = useState([]);
   const [mensaje, setMensaje] = useState(null);
@@ -46,6 +46,17 @@ export default function NuevoProyecto() {
     }
   }
 
+  async function eliminar(id) {
+    setMensaje(null);
+    try {
+      await eliminarProyecto(id);
+      setMensaje({ tipo: 'exito', texto: 'Proyecto eliminado' });
+      await cargarProyectos();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message });
+    }
+  }
+
   return (
     <>
       <h1>Nuevo proyecto (dispositivo médico)</h1>
@@ -72,7 +83,15 @@ export default function NuevoProyecto() {
           <span className="badge">{p.criticidad}</span>
           <span className="badge">{p.estado}</span>
           <p>{p.descripcion}</p>
-          <small>Encargado: {p.encargado}</small>
+          <small>
+            Encargado: {p.encargado} · Dueño (ownerId): {p.ownerId}
+            {usuario && p.ownerId === usuario.id ? ' (tú)' : ''}
+          </small>
+          <div>
+            <button type="button" className="link-button" onClick={() => eliminar(p.id)}>
+              Eliminar
+            </button>
+          </div>
         </div>
       ))}
     </>

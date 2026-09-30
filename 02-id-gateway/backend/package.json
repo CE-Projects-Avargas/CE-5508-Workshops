@@ -1,17 +1,16 @@
 {
   "name": "ce5508-taller-backend",
   "version": "1.0.0",
-  "description": "Backend del taller Docker + Login (CE5508) - sistema de proyectos de dispositivos medicos",
+  "description": "Backend del Taller 2 (CE5508) - proyectos de dispositivos medicos, valida JWT con JWKS",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2",
+    "jose": "^5.9.6",
     "mysql2": "^3.10.1",
     "sequelize": "^6.37.3"
   },
