@@ -86,6 +86,37 @@ export function refrescarSesion() {
   return refrescando;
 }
 
+// --- Logout -------------------------------------------------------------------
+// Revoca el refresh en auth-db (si no, seguiria sirviendo 8 h) y borra la sesion.
+// Si el access ya vencio, se renueva una vez para poder llamar a /logout.
+async function llamarLogout(sesion) {
+  return fetch(`${API_URL}/auth/logout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sesion.accessToken}`
+    },
+    body: JSON.stringify({ refreshToken: sesion.refreshToken })
+  });
+}
+
+export async function logout() {
+  const sesion = leerSesion();
+  try {
+    if (sesion?.refreshToken) {
+      const res = await llamarLogout(sesion);
+      if (res.status === 401) {
+        const nueva = await refrescarSesion();
+        if (nueva) await llamarLogout(nueva);
+      }
+    }
+  } catch {
+    // Si auth no responde igual se cierra la sesion local.
+  } finally {
+    cerrarSesion();
+  }
+}
+
 // Al cargar la app: pregunta si el access guardado sirve (/me).
 // Si vencio, intenta renovarlo con el refresh. Devuelve el usuario o null.
 export async function verificarSesion() {

@@ -1,9 +1,10 @@
 """auth-service: la UNICA oficina que emite carnets (CE5508, Taller 2).
 
-Rutas (en el paso 5 el gateway las publica como /api/auth/*):
+Rutas (el gateway las publica como /api/auth/*):
     POST /auth/register  {email, password, nombre} -> 201, o 409 si el correo existe
     POST /auth/login     {email, password}         -> {accessToken, refreshToken, expiresIn}, o 401
     POST /auth/refresh   {refreshToken}            -> par nuevo; el refresh usado deja de servir
+    POST /auth/logout    Bearer + {refreshToken}   -> 204; revoca ese refresh
     GET  /auth/jwks      publico                   -> JSON Web Key Set (claves publicas)
     GET  /auth/me        Bearer <access>           -> datos del usuario del token
 
@@ -172,7 +173,12 @@ def login():
 
 @app.post("/auth/refresh")
 def refresh():
-    """Cambia un refresh valido por un par nuevo y deja inservible el usado."""
+    """Cambia un refresh valido por un par nuevo y deja inservible el usado.
+
+    Deteccion de reuso: si alguien presenta un refresh que YA se habia usado,
+    lo mas probable es que se lo hayan robado. Se revocan todos los refresh
+    vigentes de ese usuario y tiene que volver a iniciar sesion.
+    """
     datos = request.get_json(silent=True) or {}
     token = datos.get("refreshToken") or ""
     if not token:
@@ -185,11 +191,24 @@ def refresh():
             # Se marca como usado SOLO si seguia vigente. Es UNA sentencia:
             # si llegan dos peticiones con el mismo refresh, solo una gana.
             cur.execute(
-                "UPDATE RefreshTokens SET revocadoEn = UTC_TIMESTAMP() "
+                "UPDATE RefreshTokens SET revocadoEn = UTC_TIMESTAMP(), motivo = 'rotado' "
                 "WHERE tokenHash = %s AND revocadoEn IS NULL AND expiraEn > UTC_TIMESTAMP()",
                 (token_hash,),
             )
             if cur.rowcount != 1:
+                # Un refresh que ya se habia ROTADO no deberia volver a llegar nunca.
+                cur.execute(
+                    "SELECT usuarioId FROM RefreshTokens WHERE tokenHash = %s AND motivo = 'rotado'",
+                    (token_hash,),
+                )
+                reusado = cur.fetchone()
+                if reusado:
+                    cur.execute(
+                        "UPDATE RefreshTokens SET revocadoEn = UTC_TIMESTAMP(), motivo = 'reuso' "
+                        "WHERE usuarioId = %s AND revocadoEn IS NULL",
+                        (reusado["usuarioId"],),
+                    )
+                    return jsonify(error="refresh reutilizado: se cerraron todas las sesiones"), 401
                 return jsonify(error="refresh token invalido, vencido o ya usado"), 401
 
             cur.execute(
@@ -200,6 +219,35 @@ def refresh():
             return jsonify(emitir_par(cur, cur.fetchone()))
     finally:
         conn.close()
+
+
+@app.post("/auth/logout")
+def logout():
+    """Cierra la sesion de verdad: revoca el refresh en auth-db.
+
+    Exige Bearer (no es una de las cuatro rutas publicas) y solo revoca un
+    refresh que sea del mismo usuario del access token.
+    """
+    payload = payload_desde_header()
+    if not payload:
+        return jsonify(error="token invalido o ausente"), 401
+
+    datos = request.get_json(silent=True) or {}
+    token = datos.get("refreshToken") or ""
+    if not token:
+        return jsonify(error="refreshToken es obligatorio"), 400
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE RefreshTokens SET revocadoEn = UTC_TIMESTAMP(), motivo = 'logout' "
+                "WHERE tokenHash = %s AND usuarioId = %s AND revocadoEn IS NULL",
+                (hash_refresh(token), int(payload["sub"])),
+            )
+    finally:
+        conn.close()
+    return "", 204
 
 
 @app.get("/auth/me")

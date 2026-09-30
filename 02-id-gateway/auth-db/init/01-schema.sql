@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS RefreshTokens (
   tokenHash CHAR(64) NOT NULL UNIQUE,
   expiraEn DATETIME NOT NULL,
   revocadoEn DATETIME NULL,
+  motivo ENUM('rotado', 'logout', 'reuso') NULL,   -- por que se revoco
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_refresh_usuario FOREIGN KEY (usuarioId) REFERENCES Usuarios(id)
 );
