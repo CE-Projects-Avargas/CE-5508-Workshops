@@ -42,7 +42,9 @@ services:
       DB_USER: backend_user
       DB_PASSWORD: backend_pass
       PORT: 4000
-      JWT_SECRET: dev-secret-ce5508-cambialo   # se elimina en el paso 4
+      JWKS_URL: http://auth-service:5001/auth/jwks   # por la red "interna"
+      JWT_ISSUER: ce5508-auth-service
+      JWT_AUDIENCE: ce5508-backend
     ports:
       - "4000:4000"
     depends_on:
