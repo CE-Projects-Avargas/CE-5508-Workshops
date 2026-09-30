@@ -1,7 +1,5 @@
--- CE5508 - Taller 2: Identidad y la puerta de entrada
--- Base de datos exclusiva de auth-service. Ningun otro servicio se conecta aqui.
--- Se ejecuta automaticamente la primera vez que este contenedor de MariaDB arranca.
-
+-- Base EXCLUSIVA de auth-service. Guarda solo usuarios y refresh tokens.
+CREATE DATABASE IF NOT EXISTS auth;
 USE auth;
 
 CREATE TABLE IF NOT EXISTS Usuarios (
@@ -11,4 +9,16 @@ CREATE TABLE IF NOT EXISTS Usuarios (
   nombre VARCHAR(255) NOT NULL,
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Se guarda el HASH del refresh token, nunca el token en claro.
+-- revocadoEn con valor = ese refresh ya se usó y no sirve más.
+CREATE TABLE IF NOT EXISTS RefreshTokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuarioId INT NOT NULL,
+  tokenHash CHAR(64) NOT NULL UNIQUE,
+  expiraEn DATETIME NOT NULL,
+  revocadoEn DATETIME NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_refresh_usuario FOREIGN KEY (usuarioId) REFERENCES Usuarios(id)
 );

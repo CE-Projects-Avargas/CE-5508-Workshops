@@ -1,55 +1,57 @@
 services:
-  mariadb:
+  # ===== DATOS: una base por servicio, cada una en su propia red =====
+  backend-db:
     image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: operacion
-    ports:
-      - "3306:3306"
+      MARIADB_ROOT_PASSWORD: root123
     volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./database/init:/docker-entrypoint-initdb.d
+      - backend_db_data:/var/lib/mysql
+      - ./backend-db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks: [datos-backend]
+    # Sin "ports": no se expone fuera de Docker
 
   auth-db:
     image: mariadb:11
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: auth
+      MARIADB_ROOT_PASSWORD: root123
     volumes:
       - auth_db_data:/var/lib/mysql
-      - ./auth-db/init:/docker-entrypoint-initdb.d
+      - ./auth-db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks: [datos-auth]
 
+  # ===== SERVICIOS =====
   backend:
     build: ./backend
     restart: unless-stopped
     environment:
-      DB_HOST: mariadb
+      DB_HOST: backend-db
       DB_PORT: 3306
       DB_NAME: operacion
-      DB_USER: root
-      DB_PASSWORD: root123
+      DB_USER: backend_user
+      DB_PASSWORD: backend_pass
       PORT: 4000
-      JWT_SECRET: dev-secret-ce5508-cambialo
+      JWT_SECRET: dev-secret-ce5508-cambialo   # se elimina en el paso 4
     ports:
       - "4000:4000"
     depends_on:
-      mariadb:
+      backend-db:
         condition: service_healthy
     volumes:
       - ./backend:/app
       - /app/node_modules
+    networks: [interna, datos-backend]
 
   auth-service:
     build: ./auth-service
@@ -58,10 +60,10 @@ services:
       DB_HOST: auth-db
       DB_PORT: 3306
       DB_NAME: auth
-      DB_USER: root
-      DB_PASSWORD: root123
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
       PORT: 5001
-      JWT_SECRET: dev-secret-ce5508-cambialo
+      JWT_SECRET: dev-secret-ce5508-cambialo   # se elimina en el paso 2
       JWT_EXPIRA_MIN: 60
     ports:
       - "5001:5001"
@@ -70,6 +72,7 @@ services:
         condition: service_healthy
     volumes:
       - ./auth-service:/app
+    networks: [interna, datos-auth]
 
   frontend:
     build: ./frontend
@@ -79,13 +82,19 @@ services:
       VITE_AUTH_URL: http://localhost:5001
     ports:
       - "5173:5173"
-    depends_on:
-      - backend
-      - auth-service
+    depends_on: [backend, auth-service]
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    networks: [borde]
+
+# Redes: cada servicio solo alcanza lo que necesita.
+networks:
+  borde:          # navegador <-> gateway (el gateway llega en el paso 5)
+  interna:        # gateway <-> servicios
+  datos-auth:     # SOLO auth-service <-> auth-db
+  datos-backend:  # SOLO backend <-> backend-db
 
 volumes:
-  mariadb_data:
+  backend_db_data:
   auth_db_data:

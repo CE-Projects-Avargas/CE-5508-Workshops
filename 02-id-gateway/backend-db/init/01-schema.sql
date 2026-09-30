@@ -1,10 +1,6 @@
--- CE5508 - Taller 2: Identidad y la puerta de entrada
--- Este script se ejecuta automáticamente la primera vez que el contenedor
--- de MariaDB arranca.
-
+CREATE DATABASE IF NOT EXISTS operacion;
 USE operacion;
 
--- Tabla de proyectos (dispositivos médicos de misión crítica) ---------------
 CREATE TABLE IF NOT EXISTS Proyectos (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(255) NOT NULL,
