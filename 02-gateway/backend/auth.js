@@ -1,145 +1,97 @@
+// Middleware de autenticacion: valida el access token por cuenta propia, sin preguntarle a auth-service
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const JWKS_URL = 'http://auth-service:4001/jwks';
-
+const JWKS_URL = process.env.JWKS_URL || 'http://auth-service:4001/jwks';
 const ISSUER = 'cafetico-auth';
 const AUDIENCE = 'cafetico-api';
 const TOKEN_TYPE = 'access';
 
-// Caché de claves públicas.
-// key: kid
-// value: PEM
+// Si llega un kid desconocido no se vuelve a pedir el JWKS antes de este tiempo
+const ESPERA_RECARGA_MS = 30 * 1000;
+
+// Cache en memoria: kid -> clave publica PEM
 const jwksCache = new Map();
+let ultimaCarga = 0;
+let cargaEnCurso = null;
+
+class JwksNoDisponible extends Error {}
 
 function jwkToPem(jwk) {
-  const keyObject = crypto.createPublicKey({
-    key: {
-      kty: jwk.kty,
-      n: jwk.n,
-      e: jwk.e
-    },
-    format: 'jwk'
-  });
-
-  return keyObject.export({
-    type: 'spki',
-    format: 'pem'
-  });
+  return crypto
+    .createPublicKey({ key: { kty: jwk.kty, n: jwk.n, e: jwk.e }, format: 'jwk' })
+    .export({ type: 'spki', format: 'pem' });
 }
 
 async function cargarJWKS() {
-  const response = await fetch(JWKS_URL);
-
-  if (!response.ok) {
-    throw new Error(`JWKS respondió HTTP ${response.status}`);
+  let response;
+  try {
+    response = await fetch(JWKS_URL);
+  } catch (err) {
+    throw new JwksNoDisponible(`No se pudo consultar el JWKS: ${err.message}`);
   }
+  if (!response.ok) throw new JwksNoDisponible(`JWKS respondio HTTP ${response.status}`);
 
   const jwks = await response.json();
-
-  if (!jwks.keys || !Array.isArray(jwks.keys)) {
-    throw new Error('Respuesta JWKS inválida');
-  }
+  if (!Array.isArray(jwks.keys)) throw new JwksNoDisponible('Respuesta JWKS invalida');
 
   for (const jwk of jwks.keys) {
-    if (!jwk.kid) {
-      continue;
-    }
-
-    const publicKey = jwkToPem(jwk);
-
-    jwksCache.set(jwk.kid, publicKey);
+    if (jwk.kid && jwk.kty === 'RSA') jwksCache.set(jwk.kid, jwkToPem(jwk));
   }
+  ultimaCarga = Date.now();
+  console.log(`JWKS actualizado. Claves en cache: ${jwksCache.size}`);
+}
 
-  console.log(
-    `JWKS actualizado. Claves en caché: ${jwksCache.size}`
-  );
+// Una sola recarga a la vez aunque lleguen muchas peticiones juntas
+function recargarJWKS() {
+  if (!cargaEnCurso) cargaEnCurso = cargarJWKS().finally(() => { cargaEnCurso = null; });
+  return cargaEnCurso;
 }
 
 async function getPublicKey(kid) {
-  // 1. Intentar utilizar la clave desde la caché.
-  if (jwksCache.has(kid)) {
-    return jwksCache.get(kid);
+  if (jwksCache.has(kid)) return jwksCache.get(kid);
+
+  // kid nuevo (p. ej. auth roto su llave): se recarga, pero no mas de una vez cada ESPERA_RECARGA_MS
+  if (jwksCache.size === 0 || Date.now() - ultimaCarga > ESPERA_RECARGA_MS) {
+    await recargarJWKS();
   }
-
-  // 2. El kid no existe en caché.
-  //    Consultamos nuevamente el JWKS.
-  await cargarJWKS();
-
-  // 3. Revisamos nuevamente después de actualizar.
-  if (jwksCache.has(kid)) {
-    return jwksCache.get(kid);
-  }
-
-  throw new Error(`No se encontró una clave con kid=${kid}`);
+  return jwksCache.get(kid) || null;
 }
 
 module.exports = async function verificarToken(req, res, next) {
-  const header = req.headers.authorization;
-
-  if (!header) {
-    return res.status(401).json({
-      error: 'Token requerido'
-    });
-  }
-
-  const [scheme, token] = header.split(' ');
-
+  const [scheme, token] = (req.headers.authorization || '').split(' ');
   if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({
-      error: 'Formato de Authorization inválido'
-    });
+    return res.status(401).json({ error: 'Token requerido' });
   }
+
+  const decoded = jwt.decode(token, { complete: true });
+  if (!decoded || decoded.header.alg !== 'RS256' || !decoded.header.kid) {
+    return res.status(401).json({ error: 'Token invalido' });
+  }
+
+  let publicKey;
+  try {
+    publicKey = await getPublicKey(decoded.header.kid);
+  } catch (err) {
+    console.error(err.message);
+    return res.status(503).json({ error: 'No se pudo validar el token en este momento' });
+  }
+  if (!publicKey) return res.status(401).json({ error: 'Token firmado con una clave desconocida' });
 
   try {
-    const decoded = jwt.decode(token, { complete: true });
-
-    if (!decoded || !decoded.header) {
-      return res.status(401).json({
-        error: 'Token inválido'
-      });
-    }
-
-    const { kid, alg } = decoded.header;
-
-    if (alg !== 'RS256') {
-      return res.status(401).json({
-        error: 'Algoritmo de token no permitido'
-      });
-    }
-
-    if (!kid) {
-      return res.status(401).json({
-        error: 'Token sin kid'
-      });
-    }
-
-    const publicKey = await getPublicKey(kid);
-
+    // jwt.verify comprueba firma y exp; issuer y audience se piden explicitamente
     const payload = jwt.verify(token, publicKey, {
       algorithms: ['RS256'],
       issuer: ISSUER,
       audience: AUDIENCE
     });
-
     if (payload.type !== TOKEN_TYPE) {
-      return res.status(401).json({
-        error: 'El token no es un access token'
-      });
+      return res.status(401).json({ error: 'El token no es un access token' });
     }
-
-    req.usuario = {
-      id: payload.sub,
-      email: payload.email
-    };
-
+    req.usuario = { id: payload.sub, email: payload.email };
     next();
-
   } catch (err) {
-    console.error('Error verificando token:', err.message);
-
-    return res.status(401).json({
-      error: 'Token inválido o expirado'
-    });
+    const error = err.name === 'TokenExpiredError' ? 'Token expirado' : 'Token invalido';
+    return res.status(401).json({ error });
   }
 };

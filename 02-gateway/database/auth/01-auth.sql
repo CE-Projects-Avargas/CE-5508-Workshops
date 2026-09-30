@@ -27,10 +27,23 @@ INSERT INTO Usuarios (id, email, password, nombre) VALUES
   (2, 'carlos@hospital.cr', '$2b$12$ZYDSSQ8FxZQ3utEgjwNy..wtzry1PwQhI.HBQbe4KJD4z5NAhugpm', 'Carlos Mena')
 ON DUPLICATE KEY UPDATE email = VALUES(email);
 
+-- Refresh tokens: se guarda solo el hash (SHA-256), nunca el token.
+-- Un refresh sirve una sola vez: al usarlo se llena usadoEn y se emite uno nuevo.
+CREATE TABLE IF NOT EXISTS RefreshTokens (
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  usuarioId INT NOT NULL,
+  tokenHash CHAR(64) NOT NULL UNIQUE,
+  expiraEn  DATETIME NOT NULL,
+  usadoEn   DATETIME NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuarioId) REFERENCES Usuarios(id)
+);
+
 -- ── Principio de menor privilegio ──────────────────────────────
 -- El servicio NO se conecta como root. Tiene su propio usuario,
 -- con permisos solo sobre lo que necesita.
 CREATE USER IF NOT EXISTS 'auth_user'@'%' IDENTIFIED BY 'auth_pass';
 GRANT SELECT, INSERT, UPDATE ON autenticacion.Usuarios TO 'auth_user'@'%';
+GRANT SELECT, INSERT, UPDATE ON autenticacion.RefreshTokens TO 'auth_user'@'%';
 -- Nota: sin DELETE. Dar de baja un usuario debería ser lógico, no físico.
 FLUSH PRIVILEGES;

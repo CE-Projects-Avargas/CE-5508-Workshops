@@ -14,12 +14,7 @@ app.get('/', (req, res) => {
   });
 });
 
-app.use(
-  '/proyectos',
-  verificarToken,
-  require('./routes/proyectos')
-);
-
+// Todas las rutas de proyectos exigen token, aunque la peticion no pase por el gateway
 app.use('/proyectos', verificarToken, require('./routes/proyectos'));
 
 const PORT = process.env.PORT || 4000;

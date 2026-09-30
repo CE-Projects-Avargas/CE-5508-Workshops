@@ -21,7 +21,7 @@ export default function App() {
   function manejarSesionExpirada() {
     setUsuario(null);
     setPantalla('login');
-    setMensajeLogin('Tu sesión ha expirado. Inicia sesión nuevamente.');
+    setMensajeLogin({ tipo: 'error', texto: 'Tu sesión ha expirado. Inicia sesión nuevamente.' });
   }
 
   window.addEventListener('sesion-expirada', manejarSesionExpirada);
@@ -32,21 +32,7 @@ export default function App() {
   }, []);
 
   function manejarLoginExitoso(respuestaLogin) {
-  /**
-   * La respuesta del auth-service tiene la siguiente estructura:
-   *
-   * {
-   *   authenticated: true,
-   *   message: "Login exitoso",
-   *   access_token: "...",
-   *   refresh_token: "...",
-   *   user: {
-   *     id: ...,
-   *     email: "...",
-   *     nombre: "..."
-   *   }
-   * }
-   */
+    // Respuesta de /api/auth/login: { accessToken, refreshToken, expiresIn, user }
 
     localStorage.setItem(
       'usuario',
@@ -55,12 +41,12 @@ export default function App() {
 
     localStorage.setItem(
       'access_token',
-      respuestaLogin.access_token
+      respuestaLogin.accessToken
     );
 
     localStorage.setItem(
       'refresh_token',
-      respuestaLogin.refresh_token
+      respuestaLogin.refreshToken
     );
 
     setUsuario(respuestaLogin.user);

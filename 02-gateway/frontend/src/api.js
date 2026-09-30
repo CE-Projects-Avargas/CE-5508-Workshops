@@ -47,9 +47,7 @@ async function refrescarTokens() {
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      refresh_token: refreshToken
-    })
+    body: JSON.stringify({ refreshToken })
   });
 
   const body = await res.json();
@@ -61,10 +59,7 @@ async function refrescarTokens() {
     );
   }
 
-  guardarTokens(
-    body.access_token,
-    body.refresh_token
-  );
+  guardarTokens(body.accessToken, body.refreshToken);
 
   return body;
 }
@@ -170,11 +165,7 @@ export async function registrarUsuario(datos) {
 /**
   * Inicia sesión.
   * Endpoint público: no requiere JWT.
-  * La respuesta contiene:
-  * authenticated
-  * access_token
-  * refresh_token
-  * user
+  * Respuesta: { accessToken, refreshToken, expiresIn, user }, o 401.
   */
 export async function iniciarSesion(credenciales) {
   const res = await fetch(`${API_URL}/auth/login`, {
@@ -186,7 +177,6 @@ export async function iniciarSesion(credenciales) {
   const body = await res.json();
 
   if (!res.ok) throw new Error(body.detail || 'Error al iniciar sesión');
-  if (!body.authenticated) throw new Error(body.message || 'Correo o contraseña incorrectos');
 
   return body;
 }
