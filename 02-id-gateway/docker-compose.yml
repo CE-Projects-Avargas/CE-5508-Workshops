@@ -1,4 +1,18 @@
 services:
+
+  # ===== ENTRADA: la unica puerta =====
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
+      - ./gateway/exigir-token.conf:/etc/nginx/exigir-token.conf:ro
+    depends_on: [auth-service, backend]
+    networks: [borde, interna]
+
   # ===== DATOS: una base por servicio, cada una en su propia red =====
   backend-db:
     image: mariadb:11
@@ -46,7 +60,7 @@ services:
       JWT_ISSUER: ce5508-auth-service
       JWT_AUDIENCE: ce5508-backend
     ports:
-      - "4000:4000"
+      - "4000:4000"   # expuesto A PROPOSITO para probar el Req 4 (saltarse la puerta)
     depends_on:
       backend-db:
         condition: service_healthy
@@ -70,8 +84,6 @@ services:
       JWT_AUDIENCE: ce5508-backend
       ACCESS_TTL_MIN: 15
       REFRESH_TTL_H: 8
-    ports:
-      - "5001:5001"
     depends_on:
       auth-db:
         condition: service_healthy

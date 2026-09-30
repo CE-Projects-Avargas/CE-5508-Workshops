@@ -21,14 +21,12 @@ import secrets
 import jwt
 import pymysql
 from flask import Flask, jsonify, request
-from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import claves as gestor_claves
 from db import esperar_base_de_datos, get_connection
 
 app = Flask(__name__)
-CORS(app)  # temporal: en el paso 5 CORS pasa al gateway
 
 JWT_ISSUER = os.getenv("JWT_ISSUER", "ce5508-auth-service")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "ce5508-backend")
