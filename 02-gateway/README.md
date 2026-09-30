@@ -113,4 +113,3 @@ curl -i localhost:8080/api/bombas/1 -H "Authorization: Bearer x.y.z"            
 ## Herramientas usadas
 
 - **Claude (Anthropic), asistente de IA.** Se usó para revisar el sistema contra la guía del taller y para estos cambios: quitar el `auth_request` del gateway (validaba tokens en la puerta, lo que prohíbe la guía) y reemplazarlo por solo exigir la cabecera; poner caché de JWKS en pump-service (antes lo pedía en cada petición); pasar los refresh tokens de un `set()` en memoria a hash en `auth-db`; alinear las respuestas con el contrato (201, 401, `accessToken`/`refreshToken`/`expiresIn`); soportar varias llaves para rotar.
-- **TODO del grupo:** agregar aquí qué otras partes se hicieron con IA u otras herramientas, y qué tuvieron que corregir de lo generado.
