@@ -96,11 +96,10 @@ services:
     build: ./frontend
     restart: unless-stopped
     environment:
-      VITE_API_URL: http://localhost:4000
-      VITE_AUTH_URL: http://localhost:5001
+      VITE_API_URL: http://localhost:8080/api   # UNA sola direccion: la puerta
     ports:
       - "5173:5173"
-    depends_on: [backend, auth-service]
+    depends_on: [gateway]
     volumes:
       - ./frontend:/app
       - /app/node_modules
