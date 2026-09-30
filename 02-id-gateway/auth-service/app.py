@@ -1,10 +1,22 @@
 """auth-service: la UNICA oficina que emite carnets (CE5508, Taller 2).
 
-Firma los JWT con una clave PRIVADA RSA que solo este servicio tiene.
-Los demas los comprueban con la PUBLICA, publicada en GET /auth/jwks.
+Rutas (en el paso 5 el gateway las publica como /api/auth/*):
+    POST /auth/register  {email, password, nombre} -> 201, o 409 si el correo existe
+    POST /auth/login     {email, password}         -> {accessToken, refreshToken, expiresIn}, o 401
+    POST /auth/refresh   {refreshToken}            -> par nuevo; el refresh usado deja de servir
+    GET  /auth/jwks      publico                   -> JSON Web Key Set (claves publicas)
+    GET  /auth/me        Bearer <access>           -> datos del usuario del token
+
+Tokens:
+  - access:  JWT RS256 firmado con la clave PRIVADA (solo este servicio la tiene).
+             Dura ACCESS_TTL_MIN (15 min). Lleva iss, aud, sub, exp y kid en la cabecera.
+  - refresh: cadena aleatoria opaca (NO es JWT). Dura REFRESH_TTL_H (8 h).
+             En la base se guarda solo su hash SHA-256. Usarlo lo invalida (rotacion).
 """
 import datetime
+import hashlib
 import os
+import secrets
 
 import jwt
 import pymysql
@@ -21,10 +33,13 @@ CORS(app)  # temporal: en el paso 5 CORS pasa al gateway
 JWT_ISSUER = os.getenv("JWT_ISSUER", "ce5508-auth-service")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "ce5508-backend")
 ACCESS_TTL_MIN = int(os.getenv("ACCESS_TTL_MIN", "15"))
+REFRESH_TTL_H = int(os.getenv("REFRESH_TTL_H", "8"))
 
 # Se cargan (o se generan si no hay) una vez al arrancar.
 CLAVES = gestor_claves.cargar_claves()
 
+
+# --- Emision de tokens -------------------------------------------------------
 
 def generar_access_token(usuario):
     """JWT corto, firmado con RS256 y la clave privada activa."""
@@ -42,6 +57,35 @@ def generar_access_token(usuario):
     # El kid va en la CABECERA del token: dice con cual clave se firmo.
     return jwt.encode(payload, privada, algorithm="RS256", headers={"kid": kid})
 
+
+def hash_refresh(token):
+    """En la base se guarda solo el hash, nunca el refresh en claro."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generar_refresh_token(cur, usuario_id):
+    """Cadena aleatoria opaca (NO es JWT). Se guarda su hash en auth-db."""
+    token = secrets.token_urlsafe(48)
+    expira = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=REFRESH_TTL_H)
+    cur.execute(
+        "INSERT INTO RefreshTokens (usuarioId, tokenHash, expiraEn) VALUES (%s, %s, %s)",
+        (usuario_id, hash_refresh(token), expira.replace(tzinfo=None)),
+    )
+    return token
+
+
+def emitir_par(cur, usuario):
+    """Respuesta estandar de login y refresh: {accessToken, refreshToken, expiresIn}."""
+    datos_publicos = {"id": usuario["id"], "email": usuario["email"], "nombre": usuario["nombre"]}
+    return {
+        "accessToken": generar_access_token(datos_publicos),
+        "refreshToken": generar_refresh_token(cur, usuario["id"]),
+        "expiresIn": ACCESS_TTL_MIN * 60,   # segundos que dura el access
+        "usuario": datos_publicos,
+    }
+
+
+# --- Verificacion (solo para /me) -------------------------------------------
 
 def payload_desde_header():
     """Valida 'Authorization: Bearer <token>': firma, exp, iss y aud."""
@@ -63,6 +107,8 @@ def payload_desde_header():
     except (jwt.PyJWTError, StopIteration):
         return None
 
+
+# --- Rutas --------------------------------------------------------------------
 
 @app.get("/")
 def health():
@@ -103,6 +149,7 @@ def register():
 
 @app.post("/auth/login")
 def login():
+    """El UNICO momento en que viaja una contrasena."""
     datos = request.get_json(silent=True) or {}
     email = (datos.get("email") or "").strip().lower()
     password = datos.get("password") or ""
@@ -118,18 +165,43 @@ def login():
                 (email,),
             )
             usuario = cur.fetchone()
+            if not usuario or not check_password_hash(usuario["password"], password):
+                return jsonify(error="credenciales invalidas"), 401
+            return jsonify(emitir_par(cur, usuario))
     finally:
         conn.close()
 
-    if not usuario or not check_password_hash(usuario["password"], password):
-        return jsonify(error="credenciales invalidas"), 401
 
-    datos_publicos = {"id": usuario["id"], "email": usuario["email"], "nombre": usuario["nombre"]}
-    return jsonify(
-        accessToken=generar_access_token(datos_publicos),
-        expiresIn=ACCESS_TTL_MIN * 60,   # segundos
-        usuario=datos_publicos,
-    )
+@app.post("/auth/refresh")
+def refresh():
+    """Cambia un refresh valido por un par nuevo y deja inservible el usado."""
+    datos = request.get_json(silent=True) or {}
+    token = datos.get("refreshToken") or ""
+    if not token:
+        return jsonify(error="refreshToken es obligatorio"), 400
+
+    token_hash = hash_refresh(token)
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            # Se marca como usado SOLO si seguia vigente. Es UNA sentencia:
+            # si llegan dos peticiones con el mismo refresh, solo una gana.
+            cur.execute(
+                "UPDATE RefreshTokens SET revocadoEn = UTC_TIMESTAMP() "
+                "WHERE tokenHash = %s AND revocadoEn IS NULL AND expiraEn > UTC_TIMESTAMP()",
+                (token_hash,),
+            )
+            if cur.rowcount != 1:
+                return jsonify(error="refresh token invalido, vencido o ya usado"), 401
+
+            cur.execute(
+                "SELECT u.id, u.email, u.nombre FROM RefreshTokens r "
+                "JOIN Usuarios u ON u.id = r.usuarioId WHERE r.tokenHash = %s",
+                (token_hash,),
+            )
+            return jsonify(emitir_par(cur, cur.fetchone()))
+    finally:
+        conn.close()
 
 
 @app.get("/auth/me")
