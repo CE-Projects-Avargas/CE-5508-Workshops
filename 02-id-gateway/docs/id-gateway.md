@@ -24,15 +24,69 @@ navegador --> gateway :8080 --+--> auth-service :5001 --> auth-db     (red datos
 Un contenedor por servicio, cada uno con su propia imagen. auth-service y backend
 tienen `healthcheck`, y el gateway no arranca hasta que los dos estén sanos.
 
-## Levantarlo
+## Estructura del proyecto
 
-```bash
-docker compose down -v          # solo la primera vez, para que corran los SQL de init
-docker compose up --build -d
+Estado final del taller. Los archivos marcados con ★ son los que cambiaron o
+nacieron en el Taller 2; el resto viene del Taller 1.
+
+```
+02-id-gateway/
+├── docker-compose.yml          ★ 6 servicios, 4 redes, 3 volúmenes
+├── .env.example                ★ referencia de variables (ya sin JWT_SECRET)
+│
+├── gateway/                    ★ la puerta, nueva en este taller
+│   ├── nginx.conf              ★ enrutamiento /api/auth/* y /api/*, 502, rutas públicas
+│   ├── cors.conf               ★ CORS en un solo lugar + preflight + proxy_set_header
+│   └── exigir-token.conf       ★ exige que exista Authorization (no verifica firma)
+│
+├── auth-service/               autenticación (Python + Flask)
+│   ├── app.py                  ★ register, login, refresh, logout, me, jwks
+│   ├── claves.py               ★ genera/carga claves RSA, kid, arma el JWKS
+│   ├── rotar_clave.py          ★ agrega una clave nueva (rotación)
+│   ├── db.py                   conexión a auth-db
+│   ├── requirements.txt        ★ + cryptography, ya sin flask-cors
+│   └── Dockerfile
+│
+├── backend/                    API de proyectos (Node + Express)
+│   ├── index.js                ★ sin cors() ni sequelize.sync()
+│   ├── middleware/auth.js      ★ verifica con JWKS (jose): firma, exp, iss, aud
+│   ├── routes/proyectos.js     ★ dueño desde el token, 403 si no es dueño
+│   ├── models/Proyecto.js      ★ + ownerId
+│   ├── db.js                   conexión a backend-db
+│   ├── package.json            ★ + jose, ya sin jsonwebtoken ni cors
+│   └── Dockerfile
+│
+├── frontend/                   interfaz web (React + Vite)
+│   └── src/
+│       ├── auth.js             ★ una sola URL, refresh rotado, logout real
+│       ├── api.js              ★ reintento único tras 401, no cierra sesión en 403
+│       ├── App.jsx, main.jsx, index.css
+│       └── pages/              Login.jsx, NuevoProyecto.jsx
+│
+├── auth-db/init/               ★ base exclusiva de auth-service
+│   ├── 01-schema.sql           ★ Usuarios + RefreshTokens (hash, revocadoEn, motivo)
+│   ├── 02-seed.sql             ★ ana@hospital.cr (id 1), carlos@hospital.cr (id 2)
+│   └── 03-permisos.sql         ★ auth_user, solo sobre sus dos tablas
+│
+├── backend-db/init/            ★ base exclusiva de backend
+│   ├── 01-schema.sql           ★ Proyectos (con ownerId, sin FK a Usuarios)
+│   ├── 02-seed.sql             ★ 3 proyectos de ejemplo
+│   └── 03-permisos.sql         ★ backend_user, solo sobre Proyectos
+│
+├── scripts/verificar.sh        ★ 31 comprobaciones en vivo de los 4 requisitos
+└── docs/
+    ├── id-gateway.md           ★ esta guía
+    └── Guia_Estudiante_T2.pdf  enunciado del taller
 ```
 
+Lo que **ya no existe** respecto al Taller 1: la carpeta `database/` (se partió en
+`auth-db/` y `backend-db/`), el `JWT_SECRET` compartido, `flask-cors` en
+auth-service y `cors` + `jsonwebtoken` en backend. Las claves RSA no están en el
+repositorio: viven en el volumen `auth_keys`.
+
 Usuarios de prueba (contraseña `clave123`): `ana@hospital.cr` (id 1, dueña de los
-proyectos del seed) y `carlos@hospital.cr` (id 2).
+proyectos del seed) y `carlos@hospital.cr` (id 2). Cómo levantarlo, más abajo en
+[Levantarlo y verificarlo](#levantarlo-y-verificarlo).
 
 ## Endpoints (por la puerta)
 
@@ -87,93 +141,145 @@ públicas; todo lo demás exige token.
   tablas. `Proyectos.ownerId` ya no es clave foránea porque el usuario vive en
   otra base; esa garantía pasa al código.
 
-## Cómo verificamos cada requisito
 
-**Automático:** `bash scripts/verificar.sh` corre 31 comprobaciones de los cuatro
-requisitos e imprime `[OK]` o `[FALLA]` en cada una (detiene auth-service unos
-segundos para probar el 502). Termina con `Resultado: 31 OK, 0 fallas`.
+## Levantarlo y verificarlo
 
-**A mano:** los mismos chequeos, uno por uno. Se corrieron en Git Bash desde
-`02-id-gateway/`. Para obtener un token:
+### 0. Levantar
+
+Primero hay que **apagar el Taller 1 si está corriendo**: publica los mismos
+puertos `4000` y `5173`, así que el Taller 2 no arranca hasta liberarlos.
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"ana@hospital.cr","password":"clave123"}' | tr -d '\n ' | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+cd 01-docker-login && docker compose stop && cd ../02-id-gateway
+docker compose down -v          # la primera vez: fuerza que corran los SQL de init
+docker compose up --build -d    # si cambió package.json, agregar -V
+docker compose ps               # 6 contenedores; auth-service y backend "healthy"
 ```
 
-### Requisito 1: Separar servicios y bases
+No hay que correr ningún seed a mano: MariaDB ejecuta sola los `.sql` de
+`auth-db/init` y `backend-db/init` la primera vez que arranca con el volumen
+vacío, y auth-service genera su clave RSA al arrancar si no existe. Al terminar
+esto ya hay usuarios, proyectos de ejemplo y claves.
+
+> **Si el arranque falla a mitad** (por ejemplo por un puerto ocupado), no
+> alcanza con repetir `docker compose up -d`: el contenedor queda creado a
+> medias con una configuración de red incompleta, el gateway no lo resuelve y
+> responde 502. Hay que recrearlo con `docker compose down && docker compose up -d`.
+>
+> **Y cuidado con `down -v` después del primer arranque:** borra también el
+> volumen `auth_keys`, así que auth-service genera una clave nueva y todos los
+> tokens emitidos antes quedan inválidos (su `kid` ya no está en el JWKS). Para
+> reiniciar sin perder claves ni sesiones, `docker compose restart`.
+
+### 1. La verificación completa: `verificar.sh`
 
 ```bash
-docker compose exec backend ping -c1 auth-db
-# ping: bad address 'auth-db'            -> backend no llega a auth-db por red
+bash scripts/verificar.sh       # Resultado: 31 OK, 0 fallas
+```
+
+Corre 31 comprobaciones de los cuatro requisitos e imprime `[OK]` o `[FALLA]` en
+cada una: aislamiento de red y de usuarios de base, el 401 del gateway, el
+preflight CORS, el 502 con auth caído (lo detiene y lo vuelve a levantar), el
+JWKS con `kid` y RS256, el `expiresIn` de 900 s, la rotación de refresh con
+detección de reúso, el logout, el acceso directo al `:4000` y el 403 por no ser
+dueño. **Si esto da 31 OK, los cuatro requisitos están cumplidos.**
+
+Lo que sigue es para *mostrarlo* en la defensa, no para volver a validarlo.
+
+### 2. En el navegador
+
+Abrir http://localhost:5173 con las DevTools en la pestaña **Network**. Usuarios
+de prueba: `ana@hospital.cr` y `carlos@hospital.cr`, contraseña `clave123`.
+
+| Qué hacer | Qué se ve |
+|---|---|
+| Iniciar sesión | Todas las peticiones van a `localhost:8080/api/...` — nunca a `:5001` ni a `:4000`. El frontend conoce una sola dirección (Req 2) |
+| Crear un proyecto | Queda con el usuario de la sesión como dueño, aunque el body no lo diga: sale del token |
+| Entrar como Carlos y mirar los proyectos de Ana | No aparece el botón *Eliminar*: la interfaz solo lo muestra en los propios. Que el backend igual responda 403 si alguien llama al DELETE a mano es el Req 4, abajo |
+| Cerrar sesión | Llama a `/api/auth/logout`, que revoca el refresh en `auth-db` — no solo borra el navegador |
+| `docker compose stop auth-service` y volver a entrar | La pantalla de login dice "servicio no disponible (502 desde el gateway)", no un error de conexión del navegador (Req 2) |
+
+En **Almacenamiento local** (DevTools → *Application* en Chrome, *Almacenamiento*
+en Firefox) la clave `ce5508_sesion` guarda `accessToken`, `refreshToken` y
+`usuario`. Pegando el access en [jwt.io](https://jwt.io) se ve la cabecera con
+`alg: RS256` y el `kid`, y el payload con `iss`, `aud`, `sub` y `exp`
+(`exp - iat = 900`, los 15 min) — eso es el Req 3 a la vista.
+
+Para ver el refresh automático, estropear el token en la Console y recargar:
+
+```js
+const s = JSON.parse(localStorage.ce5508_sesion);
+s.accessToken = s.accessToken.slice(0, -3) + 'xxx';
+localStorage.ce5508_sesion = JSON.stringify(s);
+location.reload();
+```
+
+La sesión **no** se cae: el 401 dispara `/api/auth/refresh` y el storage queda con
+un par nuevo. Si en cambio se *borra* el token, vuelve al login — sin token
+`verificarSesion()` corta antes de intentar renovar.
+
+### 3. Lo que el navegador no puede mostrar
+
+**Requisito 1 — las bases están separadas.** En Docker Desktop se ven los dos
+contenedores de base (`auth-db` y `backend-db`) como procesos distintos, cada uno
+con su volumen. Que además estén aislados por red se ve pidiéndole a un servicio
+que resuelva la base del otro:
+
+```bash
 docker compose exec auth-service python -c "import socket; socket.gethostbyname('backend-db')"
-# socket.gaierror: Name or service not known
-docker compose exec auth-db mariadb -uroot -proot123 -e "SELECT user FROM mysql.user WHERE user LIKE '%_user'"
-# solo auth_user     -> en auth-db no existe usuario para backend
-docker compose exec backend-db mariadb -uroot -proot123 -e "SELECT user FROM mysql.user WHERE user LIKE '%_user'"
-# solo backend_user
+# socket.gaierror: [Errno -2] Name or service not known
 ```
 
-### Requisito 2: Una sola puerta
+Ese error **es el resultado esperado**, no una falla: auth-service no está en la
+red `datos-backend`, así que para él el nombre `backend-db` no existe. Lo mismo al
+revés con `docker compose exec backend ping -c1 auth-db`.
+
+**Requisito 3 — la clave privada vive en un solo lugar.**
 
 ```bash
-curl -i http://localhost:8080/api/proyectos
-# 401 {"error":"falta la cabecera Authorization (gateway)"}
-curl -i -X OPTIONS http://localhost:8080/api/proyectos -H "Origin: http://localhost:5173"
-# 204 + Access-Control-Allow-Origin: http://localhost:5173
-docker compose stop auth-service
-curl -i -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/json" -d '{}'
-# 502 {"error":"servicio no disponible (502 desde el gateway)"}
-docker compose start auth-service
-curl -m 3 http://localhost:5001/auth/jwks
-# sin respuesta: auth-service no está expuesto al host
+docker compose exec auth-service ls //keys   # el .pem está aquí
+docker compose exec backend      ls //keys   # y solo aquí: "No such file or directory"
+git ls-files | grep '\.pem$'                 # vacío: ninguna clave en el repo
 ```
 
-En el navegador (DevTools > Network) todas las peticiones del frontend van a
-`http://localhost:8080/api/...`. Con auth-service detenido, la pantalla de login
-muestra "servicio no disponible (502 desde el gateway)".
-
-### Requisito 3: Firma asimétrica y JWKS
+Rotar la clave sin invalidar los tokens que ya están circulando:
 
 ```bash
-curl http://localhost:8080/api/auth/jwks
-# {"keys":[{"alg":"RS256","e":"AQAB","kid":"...","kty":"RSA","n":"...","use":"sig"}]}
+docker compose exec auth-service python rotar_clave.py
+docker compose restart auth-service
+curl -s http://localhost:8080/api/auth/jwks   # ahora el JWKS publica dos kid
 ```
 
-- Pegando el access en jwt.io: cabecera `alg: RS256` y el `kid` (el mismo del
-  JWKS); payload con `iss`, `aud`, `sub` y `exp` (exp - iat = 900 s).
-- `docker compose exec auth-service ls //keys` muestra el `.pem`;
-  `docker compose exec backend ls //keys` da "No such file or directory";
-  `git status` no muestra ningún `.pem` (están en `.gitignore`).
-- Un token de auth lo acepta backend: `GET /api/proyectos` con `$TOKEN` -> 200.
-- Refresh: el primer uso da 200 con un par nuevo; reusar el mismo da 401 "refresh
-  reutilizado" y además revoca el refresh nuevo. En `RefreshTokens` solo hay hashes
-  de 64 caracteres, con `revocadoEn` y `motivo` en los usados.
-- Logout: `POST /api/auth/logout` da 204 y después ese refresh da 401.
-- Rotación: después de `rotar_clave.py` y reiniciar auth-service, el JWKS tiene dos
-  `kid`; el token firmado con la clave vieja y el firmado con la nueva dan 200 en
-  backend. (El token nuevo puede dar 401 durante los primeros 30 s por el
-  `cooldownDuration` de jose; es intencional, evita que tokens con `kid`
-  inventados obliguen a descargar el JWKS en cada petición.)
-- Con auth-service detenido, backend sigue aceptando tokens: el JWKS está en caché
-  y no le pregunta a auth en cada petición.
+Un token emitido **antes** de rotar sigue dando 200, porque el JWKS publica la
+clave vieja además de la nueva. (Un token con el `kid` nuevo puede dar 401 durante
+los primeros 30 s por el `cooldownDuration` de jose; es intencional — evita que
+tokens con `kid` inventados obliguen a descargar el JWKS en cada petición.)
 
-### Requisito 4: Defensa en profundidad
+**Requisito 4 — defensa en profundidad.** Acá sí hace falta curl: el navegador
+nunca llama al `:4000` directo, solo conoce el `:8080`. Para tener un token a
+mano:
 
 ```bash
-curl -i http://localhost:4000/proyectos
-# 401 {"error":"token ausente"}
-curl -i http://localhost:4000/proyectos -H "Authorization: Bearer $TOKEN"
-# 200, igual que pasando por la puerta
-curl -i http://localhost:8080/api/proyectos -H "Authorization: Bearer falso"
-# 401 {"error":"token invalido"}  -> la puerta lo deja pasar, el backend lo rechaza
-docker compose exec gateway wget -qO- http://backend:4000/proyectos
-# wget: server returned error: HTTP/1.1 401 Unauthorized  -> también desde dentro de la red
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana@hospital.cr","password":"clave123"}' | jq -r .accessToken)
 ```
 
-**401 vs 403.** Carlos (token válido) intenta `DELETE /api/proyectos/1`, que es de
-Ana, y recibe 403 "no eres el dueno de este proyecto"; su sesión sigue activa. Sin
-token, con firma alterada o vencido, la respuesta es 401.
+```bash
+curl -i http://localhost:4000/proyectos                           # 401: sin token, saltándose la puerta
+curl -i http://localhost:4000/proyectos -H "Authorization: Bearer $TOKEN"     # 200: igual que por la puerta
+curl -i http://localhost:8080/api/proyectos -H "Authorization: Bearer falso"  # 401: la puerta lo pasa, el backend lo rechaza
+curl -i http://localhost:4000/proyectos -H "X-User-Id: 1"         # 401: no confía en cabeceras inyectadas
+```
+
+El último es el punto fino del requisito: el backend no delega en nadie. La puerta
+solo exige que la cabecera `Authorization` exista; quien comprueba firma, `exp`,
+`iss` y `aud` es el backend, se llegue por donde se llegue.
+
+**401 vs 403.** Con el token de Carlos, borrar un proyecto de Ana da 403 y su
+sesión sigue viva — identidad válida, permiso insuficiente. Sin token, con firma
+alterada o vencido, es 401. (Un `id` que no existe da 404, no 403; conviene tomar
+un id real de `GET /api/proyectos` para no confundirlos.)
 
 ## Herramientas usadas
 

@@ -12,7 +12,7 @@ CE-5508-Workshops/
 │   ├── README.md       vista general y cómo levantarlo
 │   └── docs/           guía completa (docker-login.md)
 │
-└── 02-id-gateway/      Taller 2 — puerta única, bases separadas y JWKS (en progreso)
+└── 02-id-gateway/      Taller 2 — puerta única, bases separadas y JWKS
     ├── README.md       vista general y cómo levantarlo
     └── docs/           guía completa (id-gateway.md)
 ```
@@ -22,7 +22,7 @@ CE-5508-Workshops/
 | Carpeta | Estado |
 |---|---|
 | [`01-docker-login`](01-docker-login/) | Docker + Docker Compose, API REST con Node/Express/Sequelize, servicio de autenticación en Python/Flask, MariaDB, sesiones con JWT. Completo. |
-| [`02-id-gateway`](02-id-gateway/) | Punto de partida: copia de `01-docker-login`. Pendiente construir el gateway, separar las bases de auth y backend, y pasar a firma asimétrica con JWKS. |
+| [`02-id-gateway`](02-id-gateway/) | Gateway nginx como única puerta (`:8080`), una base de datos por servicio en redes separadas, firma asimétrica RS256 con JWKS y rotación de claves, access de 15 min con refresh rotado, y validación independiente en el backend. Completo. |
 
 ## Cómo usar este repositorio
 
