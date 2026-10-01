@@ -7,7 +7,9 @@ const ESTADO_INICIAL = {
 };
 
 // Consume el backend a traves del gateway (una sola URL) con el access token.
-// "Eliminar" sirve para ver el 403: solo el dueño del proyecto puede borrarlo.
+// "Eliminar" solo se muestra en los proyectos propios. Es cortesia de interfaz,
+// no seguridad: el backend responde 403 igual si alguien llama al DELETE por su
+// cuenta (ver el Requisito 4 en docs/id-gateway.md).
 export default function NuevoProyecto({ usuario }) {
   const [form, setForm] = useState(ESTADO_INICIAL);
   const [proyectos, setProyectos] = useState([]);
@@ -87,11 +89,13 @@ export default function NuevoProyecto({ usuario }) {
             Encargado: {p.encargado} · Dueño (ownerId): {p.ownerId}
             {usuario && p.ownerId === usuario.id ? ' (tú)' : ''}
           </small>
-          <div>
-            <button type="button" className="link-button" onClick={() => eliminar(p.id)}>
-              Eliminar
-            </button>
-          </div>
+          {usuario && p.ownerId === usuario.id && (
+            <div>
+              <button type="button" className="link-button" onClick={() => eliminar(p.id)}>
+                Eliminar
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </>
