@@ -7,7 +7,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "amqplib": "^0.10.9",
     "mysql2": "^3.10.1",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",

@@ -1,4 +1,4 @@
-# Taller 3: RabbitMQ es el broker; cada nuevo servicio tiene su propia BD.
+# Taller 3 — Persona 1: dispositivos, base propia y seguridad JWT/JWKS.
 name: ce5508-taller3
 services:
   gateway:
@@ -155,49 +155,6 @@ services:
       retries: 10
     networks:
     - datos-device
-  notification-db:
-    image: mariadb:11
-    restart: unless-stopped
-    environment:
-      MARIADB_ROOT_PASSWORD: root123
-    volumes:
-    - notification_data:/var/lib/mysql
-    - ./database/init/notification:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test:
-      - CMD
-      - healthcheck.sh
-      - --connect
-      - --innodb_initialized
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-    - datos-notification
-  rabbitmq:
-    image: rabbitmq:4-management
-    hostname: rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: taller
-      RABBITMQ_DEFAULT_PASS: taller_pass
-    ports:
-    - 127.0.0.1:5672:5672
-    - 127.0.0.1:15672:15672
-    volumes:
-    - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test:
-      - CMD
-      - rabbitmq-diagnostics
-      - -q
-      - ping
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 20s
-    networks:
-    - eventos
   device-service:
     build: ./device-service
     restart: unless-stopped
@@ -211,13 +168,9 @@ services:
       AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
       JWT_ISS: auth-service
       JWT_AUD: ce5508-taller2
-      RABBITMQ_URL: amqp://taller:taller_pass@rabbitmq:5672
-      RABBITMQ_EXCHANGE: devices.events
-      RABBITMQ_QUEUE: notifications.devices
+      DEVICE_EVENT_PUBLISHER_MODULE: ${DEVICE_EVENT_PUBLISHER_MODULE:-}
     depends_on:
       device-db:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
       auth-service:
         condition: service_started
@@ -226,38 +179,14 @@ services:
     networks:
     - interna
     - datos-device
-    - eventos
-  notification-service:
-    build: ./notification-service
-    restart: unless-stopped
-    environment:
-      DB_HOST: notification-db
-      DB_NAME: notifications
-      DB_USER: notification_user
-      DB_PASSWORD: notification_pass
-      RABBITMQ_URL: amqp://taller:taller_pass@rabbitmq:5672
-      RABBITMQ_EXCHANGE: devices.events
-      RABBITMQ_QUEUE: notifications.devices
-    depends_on:
-      notification-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-    - datos-notification
-    - eventos
 networks:
   borde: null
   interna: null
   datos-auth: null
   datos-operacion: null
   datos-device: null
-  datos-notification: null
-  eventos: null
 volumes:
   auth_data: null
   operacion_data: null
   auth_keys: null
   device_data: null
-  notification_data: null
-  rabbitmq_data: null
