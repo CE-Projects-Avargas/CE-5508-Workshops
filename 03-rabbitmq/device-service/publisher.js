@@ -20,6 +20,10 @@ let connection = null;
 let channel = null;
 let connecting = null;
 
+const EVENT_TYPES = new Set([
+  'device.registered',
+  'device.alert.triggered'
+]);
 
 async function crearCanal() {
   if (channel) {
@@ -178,6 +182,12 @@ async function publicar(event) {
 
   if (!event.type) {
     throw new Error('El evento no contiene type');
+  }
+
+  if (!EVENT_TYPES.has(event.type)) {
+    throw new Error(
+      `Tipo de evento no soportado: ${event.type}`
+    );
   }
 
   try {
