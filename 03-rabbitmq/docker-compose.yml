@@ -163,6 +163,7 @@ services:
 
     # Crea un usuario inicial y luego device.service utiliza esas mismas credenciales para conectarse a RabbitMQ.
     environment:
+      RABBITMQ_NODENAME: rabbit@rabbitmq
       RABBITMQ_DEFAULT_USER: taller3
       RABBITMQ_DEFAULT_PASS: taller3_pass
 
