@@ -158,6 +158,7 @@ services:
   
   rabbitmq:
     image: rabbitmq:4-management
+    hostname: rabbitmq
     restart: unless-stopped
 
     # Crea un usuario inicial y luego device.service utiliza esas mismas credenciales para conectarse a RabbitMQ.
