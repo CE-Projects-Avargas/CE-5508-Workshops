@@ -214,9 +214,11 @@ services:
       RABBITMQ_USER: taller3
       RABBITMQ_PASSWORD: taller3_pass
       RABBITMQ_EXCHANGE: device.events
+      RABBITMQ_REGISTRATION_QUEUE: registrations.queue
+      RABBITMQ_ALERT_QUEUE: alerts.queue
 
+      DEVICE_EVENT_PUBLISHER_MODULE: ./publisher.js
 
-      DEVICE_EVENT_PUBLISHER_MODULE: ${DEVICE_EVENT_PUBLISHER_MODULE:-}
     depends_on:
       device-db:
         condition: service_healthy
