@@ -1,5 +1,6 @@
 const amqp = require('amqplib');
 const pool = require('./db');
+const { consumir } = require('./consumer');
 
 const esperar = ms =>
   new Promise(resolve => setTimeout(resolve, ms));
@@ -31,7 +32,7 @@ async function iniciar() {
         connection.once('close', resolve);
       });
 
-      const channel = await connection.createChannel();
+      const channel = await connection.createConfirmChannel();
 
       channel.on('error', err => {
         console.error('Error del canal:', err.message);
@@ -60,8 +61,12 @@ async function iniciar() {
 
       await channel.prefetch(1);
 
-      console.log(`RabbitMQ conectado. Cola preparada: ${queue}`);
-      console.log('Punto 2 listo: todavía no se consumen mensajes');
+      const rejectedQueue = 'alerts.rejected.queue';
+      await channel.assertQueue(rejectedQueue, {
+        durable: true
+      });
+
+      await consumir(channel, queue, rejectedQueue);
 
       await cierre;
       console.warn('Conexión cerrada; se intentará reconectar');
