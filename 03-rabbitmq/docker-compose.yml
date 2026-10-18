@@ -155,7 +155,47 @@ services:
       retries: 10
     networks:
     - datos-device
-  
+  notification-service:
+    build: ./notification-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: notification-db
+      DB_NAME: notifications
+      DB_USER: notification_user
+      DB_PASSWORD: notification_pass
+
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: taller3
+      RABBITMQ_PASSWORD: taller3_pass
+      RABBITMQ_EXCHANGE: device.events
+      RABBITMQ_ALERT_QUEUE: alerts.queue
+
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+    networks:
+      - interna
+      - datos-notification
+  notification-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - notification_data:/var/lib/mysql
+      - ./database/init/notification:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-notification
+
   rabbitmq:
     image: rabbitmq:4-management
     hostname: rabbitmq
@@ -240,9 +280,11 @@ networks:
   datos-auth: null
   datos-operacion: null
   datos-device: null
+  datos-notification: null
 volumes:
   auth_data: null
   operacion_data: null
   auth_keys: null
   device_data: null
   rabbitmq_data: null
+  notification_data: null
