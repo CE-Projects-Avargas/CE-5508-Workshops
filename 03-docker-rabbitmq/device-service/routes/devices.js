@@ -4,11 +4,16 @@ const router = express.Router();
 
 const verificarToken = require('../middleware/verificarToken');
 
+const crypto = require('crypto');
+
 const {
   crearDevice,
   obtenerDevicePorId
 } = require('../models/Device');
 
+const {
+  publicarEvento
+} = require('../rabbitmq');
 
 // Todas las rutas de dispositivos requieren un JWT válido.
 router.use(verificarToken);
@@ -61,6 +66,20 @@ router.post('/', async (req, res) => {
       ownerId
     });
 
+    const evento = {
+      eventId: crypto.randomUUID(),
+      type: 'device.registered',
+      occurredAt: new Date().toISOString(),
+      deviceId: device.id,
+      ownerType: device.ownerType,
+      ownerId: device.ownerId
+    };
+
+    await publicarEvento(
+      'device.registered',
+      evento
+    );
+
     return res.status(201).json(device);
 
   } catch (error) {
@@ -105,5 +124,69 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Publicar una alerta para un dispositivo.
+router.post('/:id/alerts', async (req, res) => {
+  try {
+    const device = await obtenerDevicePorId(req.params.id);
+
+    if (!device) {
+      return res.status(404).json({
+        error: 'Dispositivo no encontrado'
+      });
+    }
+
+    // Autorización por recurso.
+    if (
+      device.ownerType === 'user' &&
+      String(device.ownerId) !== String(req.usuario.id)
+    ) {
+      return res.status(403).json({
+        error: 'No tiene permiso sobre este dispositivo'
+      });
+    }
+
+    const {
+      level,
+      message
+    } = req.body;
+
+    if (!level || !message) {
+      return res.status(400).json({
+        error: 'level y message son obligatorios'
+      });
+    }
+
+    const evento = {
+      eventId: crypto.randomUUID(),
+      type: 'device.alert.triggered',
+      occurredAt: new Date().toISOString(),
+      deviceId: device.id,
+      ownerType: device.ownerType,
+      ownerId: device.ownerId,
+      level,
+      message
+    };
+
+    await publicarEvento(
+      'device.alert.triggered',
+      evento
+    );
+
+    return res.status(202).json({
+      mensaje: 'Alerta publicada correctamente',
+      eventId: evento.eventId
+    });
+
+  } catch (error) {
+    console.error(
+      'Error al publicar alerta:',
+      error
+    );
+
+    return res.status(500).json({
+      error: 'Error interno del servidor'
+    });
+  }
+});
 
 module.exports = router;

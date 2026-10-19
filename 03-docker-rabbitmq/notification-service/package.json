@@ -1,0 +1,13 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Consumidor de eventos de dispositivos para el Taller 3 de CE5508",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.5",
+    "mysql2": "^3.15.3"
+  }
+}

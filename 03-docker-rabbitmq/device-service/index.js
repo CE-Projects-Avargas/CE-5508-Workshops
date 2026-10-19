@@ -2,6 +2,7 @@ const express = require('express');
 
 const { verificarConexion } = require('./db');
 const devicesRouter = require('./routes/devices');
+const { conectarRabbitMQ } = require('./rabbitmq');
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/devices', devicesRouter);
 async function iniciarServidor() {
   try {
     await verificarConexion();
+    await conectarRabbitMQ();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`device-service escuchando en el puerto ${PORT}`);
