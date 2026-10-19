@@ -42,6 +42,25 @@ services:
     networks:
       - backend-network
 
+  # Base de datos exclusiva del servicio de dispositivos
+  device-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: device_root123
+      MYSQL_DATABASE: device_db
+      MYSQL_USER: device_user
+      MYSQL_PASSWORD: device123
+    volumes:
+      - device_db_data:/var/lib/mysql
+      - ./database/device/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - device-network
 
   # Backend de proyectos, solo accede a backend-db y a auth-service para validar tokens JWT, no tiene acceso a auth-db
   backend:
@@ -126,12 +145,44 @@ services:
     networks:
       - gateway-network
 
+  # Servicio de dispositivos
+  device-service:
+    build: ./device-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: device-db
+      DB_PORT: 3306
+      DB_NAME: device_db
+      DB_USER: device_user
+      DB_PASSWORD: device123
+      PORT: 6000
+
+      JWKS_URL: http://auth-service:5000/jwks
+      JWT_ISSUER: ce5508-auth
+      JWT_AUDIENCE: ce5508-backend
+
+    ports:
+      - "6000:6000"
+
+    depends_on:
+      device-db:
+        condition: service_healthy
+
+    volumes:
+      - ./device-service:/app
+      - /app/node_modules
+
+    networks:
+      - device-network
+      - gateway-network
 
 volumes:
   auth_db_data: #Volumen para persistir los datos de la base de datos del servicio de autenticación
   backend_db_data: #Volumen para persistir los datos de la base de datos del backend de proyectos
+  device_db_data: #Volumen para persistir los datos de la base de datos del servicio de dispositivos
 
 networks:
   auth-network: #Comunicación entre auth-service y auth-db
   backend-network: #Comunicación entre backend y backend-db
   gateway-network: #Comunicación entre gateway, auth-service, backend y frontend
+  device-network: #Comunicación entre device-service y device-db
