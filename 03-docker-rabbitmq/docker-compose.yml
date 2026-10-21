@@ -1,0 +1,261 @@
+services:
+
+  # Base de datos exclusiva del servicio de autenticación
+  auth-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: auth_root123
+      MYSQL_DATABASE: auth_db
+      MYSQL_USER: auth_user
+      MYSQL_PASSWORD: auth123
+    volumes:
+      - auth_db_data:/var/lib/mysql
+      - ./database/auth/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - auth-network
+
+
+  # Base de datos exclusiva del backend de proyectos
+  #No tiene info de la autenticación 
+  backend-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: backend_root123
+      MYSQL_DATABASE: backend_db
+      MYSQL_USER: backend_user
+      MYSQL_PASSWORD: backend123
+    volumes:
+      - backend_db_data:/var/lib/mysql
+      - ./database/backend/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend-network
+
+  # Base de datos exclusiva del servicio de dispositivos
+  device-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: device_root123
+      MYSQL_DATABASE: device_db
+      MYSQL_USER: device_user
+      MYSQL_PASSWORD: device123
+    volumes:
+      - device_db_data:/var/lib/mysql
+      - ./database/device/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - device-network
+
+# Base de datos exclusiva del servicio de notificaciones
+  notification-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: notification_root123
+      MYSQL_DATABASE: notification_db
+      MYSQL_USER: notification_user
+      MYSQL_PASSWORD: notification123
+    volumes:
+      - notification_db_data:/var/lib/mysql
+      - ./database/notification/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - notification-network
+
+  # Backend de proyectos, solo accede a backend-db y a auth-service para validar tokens JWT, no tiene acceso a auth-db
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: backend-db
+      DB_PORT: 3306
+      DB_NAME: backend_db
+      DB_USER: backend_user
+      DB_PASSWORD: backend123
+      PORT: 4000
+      
+      JWKS_URL: http://auth-service:5000/jwks #Endpoint para obtener las claves públicas del servicio de autenticación
+      #Claves de configuración para validar los tokens JWT emitidos por el servicio de autenticación
+      JWT_ISSUER: ce5508-auth
+      JWT_AUDIENCE: ce5508-backend  
+    ports:
+      - "4000:4000"
+    depends_on:
+      backend-db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - backend-network
+      - gateway-network
+    
+
+
+  # Servicio de autenticación en Python/Flask, emite los access/refresh tokens 
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: auth-db
+      DB_PORT: 3306
+      DB_NAME: auth_db
+      DB_USER: auth_user
+      DB_PASSWORD: auth123
+      PORT: 5000
+      JWT_PRIVATE_KEY_PATH: /run/secrets/auth_private.pem
+    ports:
+      - "5000:5000"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    volumes:
+      - ./auth-service:/app
+      - ./secrets/private.pem:/run/secrets/auth_private.pem:ro #la clave privada para firmar los tokens JWT, solo la usa auth-service y en modo lectura
+    networks:
+      - auth-network
+      - gateway-network
+
+
+  # Frontend React
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      - gateway
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - gateway-network
+
+  # Gateway de API, el unico punto de entrada a las APIs
+  gateway:
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - backend
+    networks:
+      - gateway-network
+
+  # Servicio de dispositivos
+  device-service:
+    build: ./device-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: device-db
+      DB_PORT: 3306
+      DB_NAME: device_db
+      DB_USER: device_user
+      DB_PASSWORD: device123
+      PORT: 6000
+
+      JWKS_URL: http://auth-service:5000/jwks
+      JWT_ISSUER: ce5508-auth
+      JWT_AUDIENCE: ce5508-backend
+
+      RABBITMQ_URL: amqp://rabbit:rabbit123@rabbitmq:5672
+
+    ports:
+      - "6000:6000"
+
+    depends_on:
+      device-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+    volumes:
+      - ./device-service:/app
+      - /app/node_modules
+
+    networks:
+      - device-network
+      - gateway-network
+      - event-network
+
+# Servicio de mensajería RabbitMQ
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbit
+      RABBITMQ_DEFAULT_PASS: rabbit123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - event-network
+
+# Servicio de notificaciones, se conecta a notification-db y a RabbitMQ
+  notification-service:
+      build: ./notification-service
+      restart: unless-stopped
+      environment:
+        DB_HOST: notification-db
+        DB_PORT: 3306
+        DB_NAME: notification_db
+        DB_USER: notification_user
+        DB_PASSWORD: notification123
+
+        RABBITMQ_URL: amqp://rabbit:rabbit123@rabbitmq:5672
+
+      depends_on:
+        notification-db:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+
+      volumes:
+        - ./notification-service:/app
+        - /app/node_modules
+
+      networks:
+        - notification-network
+        - event-network
+
+volumes:
+  auth_db_data: #Volumen para persistir los datos de la base de datos del servicio de autenticación
+  backend_db_data: #Volumen para persistir los datos de la base de datos del backend de proyectos
+  device_db_data: #Volumen para persistir los datos de la base de datos del servicio de dispositivos
+  notification_db_data: #Volumen para persistir los datos de la base de datos del servicio de notificaciones
+
+networks:
+  auth-network: #Comunicación entre auth-service y auth-db
+  backend-network: #Comunicación entre backend y backend-db
+  gateway-network: #Comunicación entre gateway, auth-service, backend y frontend
+  device-network: #Comunicación entre device-service y device-db
+  event-network: #Comunicación entre servicios y RabbitMQ
+  notification-network: #Comunicación entre notification-service y notification-db
