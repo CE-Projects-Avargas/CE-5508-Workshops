@@ -1,0 +1,17 @@
+{
+  "name": "device-service",
+  "version": "1.0.0",
+  "description": "Microservicio de dispositivos para el Taller 3 de CE5508",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "mysql2": "^3.15.3"
+  }
+}

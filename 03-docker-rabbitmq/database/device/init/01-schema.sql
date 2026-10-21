@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS Devices (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    serial VARCHAR(100) NOT NULL UNIQUE,
+    nombre VARCHAR(150) NOT NULL,
+    owner_type ENUM('user', 'project') NOT NULL,
+    owner_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
