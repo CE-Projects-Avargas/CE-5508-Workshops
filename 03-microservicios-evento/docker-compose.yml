@@ -1,0 +1,263 @@
+services:
+  # BASE DE AUTENTICACION
+  auth-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+    volumes:
+      - auth_db_data:/var/lib/mysql
+      - ./database/auth:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-auth
+
+  # BASE DE OPERACION
+  operacion-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+    volumes:
+      - operacion_db_data:/var/lib/mysql
+      - ./database/operacion:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-operacion
+
+  # BASE DE DISPOSITIVOS
+  device-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: devices
+      MYSQL_USER: device_user
+      MYSQL_PASSWORD: device_pass
+    volumes:
+      - device_db_data:/var/lib/mysql
+      - ./database/device:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-device
+
+  # BASE DE NOTIFICACIONES
+  notification-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: notifications
+      MYSQL_USER: notification_user
+      MYSQL_PASSWORD: notification_pass
+    volumes:
+      - notification_db_data:/var/lib/mysql
+      - ./database/notification:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-notification
+
+  # BROKER DE EVENTOS
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: taller3
+      RABBITMQ_DEFAULT_PASS: taller3-local-only
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - interna
+
+  # DEVICE SERVICE
+  device-service:
+    build: ./device-service
+    restart: unless-stopped
+    environment:
+      PORT: 4003
+      DB_HOST: device-db
+      DB_PORT: 3306
+      DB_NAME: devices
+      DB_USER: device_user
+      DB_PASSWORD: device_pass
+      JWKS_URL: http://auth-service:4001/jwks
+      RABBITMQ_URL: amqp://taller3:taller3-local-only@rabbitmq:5672
+      EVENTS_EXCHANGE: ce5508.events
+    depends_on:
+      device-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - interna
+      - datos-device
+
+  # NOTIFICATION SERVICE
+  notification-service:
+    build: ./notification-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: notification-db
+      DB_PORT: 3306
+      DB_NAME: notifications
+      DB_USER: notification_user
+      DB_PASSWORD: notification_pass
+      RABBITMQ_URL: amqp://taller3:taller3-local-only@rabbitmq:5672
+      EVENTS_EXCHANGE: ce5508.events
+      EVENTS_QUEUE: notifications
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - interna
+      - datos-notification
+
+  # AUTH SERVICE
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: auth-db
+      DB_PORT: 3306
+      DB_NAME: autenticacion
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
+      ACCESS_TOKEN_MINUTES: 15
+      REFRESH_TOKEN_HOURS: 8
+    ports:
+      - "4001:4001"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    volumes:
+      - ./auth-service:/app
+      - auth-keys:/app/keys
+    networks:
+      - interna
+      - datos-auth
+
+  # BACKEND 
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_PORT: 3306
+      DB_NAME: operacion
+      DB_USER: backend_user
+      DB_PASSWORD: backend_pass
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - interna
+      - datos-operacion
+
+  # PUMP SERVICE
+  pump-service: 
+    build: ./pump-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_PORT: 3306
+      DB_NAME: operacion
+      DB_USER: pump_user
+      DB_PASSWORD: pump_pass
+      PORT: 4002
+    ports:
+      - "4002:4002"
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    volumes:
+    - ./pump-service:/app
+    - /app/node_modules
+    networks:
+      - interna
+      - datos-operacion
+
+  # API GATEWAY
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
+      - ./gateway/requiere-token.conf:/etc/nginx/requiere-token.conf:ro
+    depends_on:
+      - auth-service
+      - backend
+      - pump-service
+      - device-service
+    networks: 
+      - borde
+      - interna
+
+  # FRONTEND
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - gateway
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - borde
+
+# VOLUMENES
+volumes:
+  auth_db_data:
+  operacion_db_data:
+  device_db_data:
+  notification_db_data:
+  rabbitmq_data:
+  auth-keys:
+
+# REDES
+networks:
+  borde:
+  interna:
+  datos-auth:
+  datos-operacion:
+  datos-device:
+  datos-notification:
