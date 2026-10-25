@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS Devices (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    serial VARCHAR(100) NOT NULL UNIQUE,
+    nombre VARCHAR(150) NOT NULL,
+    ownerType ENUM('user', 'project') NOT NULL,
+    ownerId INT UNSIGNED NOT NULL,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_devices_owner (ownerType, ownerId)
+)   ENGINE=InnoDB
+    DEFAULT CHARSET=utf8mb4
+    COLLATE=utf8mb4_unicode_ci;
