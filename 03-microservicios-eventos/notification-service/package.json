@@ -1,0 +1,18 @@
+{
+  "name": "ce5508-taller3-notification-service",
+  "version": "1.0.0",
+  "description": "notification-service del Taller 3 (CE5508), consume eventos de RabbitMQ y registra notificaciones",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "amqplib": "^2.2.0",
+    "mysql2": "^3.10.1",
+    "sequelize": "^6.37.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

@@ -66,9 +66,28 @@ services:
       retries: 10
     networks: [datos-device]
 
+  notification-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - notification_db_data:/var/lib/mysql
+      - ./notification-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [datos-notification]
+
   # ===== BROKER DE EVENTOS =====
   rabbitmq:
     image: rabbitmq:3-management
+    # RabbitMQ guarda sus datos en una carpeta con el nombre del host. Sin un
+    # hostname fijo, al recrear el contenedor cambia y las colas y mensajes
+    # pendientes "desaparecen" aunque el volumen siga ahi.
+    hostname: rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: eventos
@@ -171,6 +190,35 @@ services:
     networks: [interna, datos-device, mensajeria]
     # Sin "ports": solo se llega por el gateway
 
+  notification-service:
+    build: ./notification-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: notification-db
+      DB_PORT: 3306
+      DB_NAME: notificaciones
+      DB_USER: notification_user
+      DB_PASSWORD: notification_pass
+      PORT: 4200
+      RABBITMQ_URL: amqp://eventos:eventos123@rabbitmq:5672   # por la red "mensajeria"
+      MAX_INTENTOS: 10           # tras 10 intentos fallidos el mensaje va a la DLQ
+    healthcheck:                 # sano = conectado a RabbitMQ y consumiendo
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4200/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./notification-service:/app
+      - /app/node_modules
+    networks: [datos-notification, mensajeria]
+    # Sin "ports" y fuera de "interna": no tiene API publica, nadie le habla
+    # por HTTP. Solo recibe eventos de RabbitMQ y escribe en su base.
+
   frontend:
     build: ./frontend
     restart: unless-stopped
@@ -191,6 +239,7 @@ networks:
   datos-auth:     # SOLO auth-service <-> auth-db
   datos-backend:  # SOLO backend <-> backend-db
   datos-device:   # SOLO device-service <-> device-db
+  datos-notification:  # SOLO notification-service <-> notification-db
   mensajeria:     # SOLO servicios que publican/consumen <-> rabbitmq
 
 volumes:
@@ -198,4 +247,5 @@ volumes:
   auth_db_data:
   auth_keys:
   device_db_data:
+  notification_db_data:
   rabbitmq_data:
