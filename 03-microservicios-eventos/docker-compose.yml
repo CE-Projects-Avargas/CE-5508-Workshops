@@ -49,6 +49,21 @@ services:
       retries: 10
     networks: [datos-auth]
 
+  device-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - device_db_data:/var/lib/mysql
+      - ./device-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [datos-device]
+
   # ===== BROKER DE EVENTOS =====
   rabbitmq:
     image: rabbitmq:3-management
@@ -143,10 +158,12 @@ networks:
   interna:        # gateway <-> servicios
   datos-auth:     # SOLO auth-service <-> auth-db
   datos-backend:  # SOLO backend <-> backend-db
+  datos-device:   # SOLO device-service <-> device-db
   mensajeria:     # SOLO servicios que publican/consumen <-> rabbitmq
 
 volumes:
   backend_db_data:
   auth_db_data:
   auth_keys:
+  device_db_data:
   rabbitmq_data:
