@@ -49,6 +49,24 @@ services:
       retries: 10
     networks: [datos-auth]
 
+  # ===== BROKER DE EVENTOS =====
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: eventos
+      RABBITMQ_DEFAULT_PASS: eventos123
+    ports:
+      - "15672:15672"   # panel web, solo para ver los mensajes durante el taller
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks: [mensajeria]
+
   # ===== SERVICIOS =====
   backend:
     build: ./backend
@@ -125,8 +143,10 @@ networks:
   interna:        # gateway <-> servicios
   datos-auth:     # SOLO auth-service <-> auth-db
   datos-backend:  # SOLO backend <-> backend-db
+  mensajeria:     # SOLO servicios que publican/consumen <-> rabbitmq
 
 volumes:
   backend_db_data:
   auth_db_data:
   auth_keys:
+  rabbitmq_data:
