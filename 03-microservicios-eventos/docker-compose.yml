@@ -154,6 +154,7 @@ services:
       JWKS_URL: http://auth-service:5001/auth/jwks   # por la red "interna"
       JWT_ISSUER: ce5508-auth-service
       JWT_AUDIENCE: ce5508-backend
+      RABBITMQ_URL: amqp://eventos:eventos123@rabbitmq:5672   # por la red "mensajeria"
     healthcheck:                 # sano = responde en su puerto (wget viene en alpine)
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4100/"]
       interval: 5s
@@ -162,10 +163,12 @@ services:
     depends_on:
       device-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     volumes:
       - ./device-service:/app
       - /app/node_modules
-    networks: [interna, datos-device]
+    networks: [interna, datos-device, mensajeria]
     # Sin "ports": solo se llega por el gateway
 
   frontend:

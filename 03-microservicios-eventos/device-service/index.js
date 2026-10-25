@@ -1,5 +1,6 @@
 const express = require('express');
 const sequelize = require('./db');
+const { conectar } = require('./events');
 
 const app = express();
 // Sin cors(): CORS se resuelve una sola vez en el gateway.
@@ -30,6 +31,9 @@ async function start() {
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
+
+  // RabbitMQ conecta en segundo plano (con reintentos), sin frenar el arranque.
+  conectar();
 
   // Sin sequelize.sync(): el esquema lo crea device-db/init/*.sql
   app.listen(PORT, () => {

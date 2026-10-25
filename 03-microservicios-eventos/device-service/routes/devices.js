@@ -2,11 +2,24 @@ const express = require('express');
 const router = express.Router();
 const Device = require('../models/Device');
 const Alert = require('../models/Alert');
+const { publicarEvento } = require('../events');
 
 // Todas estas rutas ya pasaron por verificarJWT: req.usuario es confiable.
 //   401 -> no sabemos quien es (lo responde el middleware)
 //   403 -> sabemos quien es, pero el dispositivo no es suyo
 //   404 -> el dispositivo no existe
+
+// Publica un evento sin romper la respuesta HTTP: el dato ya quedo guardado en
+// device-db, asi que si RabbitMQ falla solo se registra el error en el log.
+// (Limitacion conocida: para garantizarlo haria falta un patron "outbox".)
+async function publicarSinFallar(type, datos) {
+  try {
+    return await publicarEvento(type, datos);
+  } catch (err) {
+    console.error(`No se pudo publicar ${type}:`, err.message);
+    return null;
+  }
+}
 
 // Busca el dispositivo y comprueba que sea del usuario del token.
 // Si algo falla ya responde (404 o 403) y devuelve null.
@@ -42,6 +55,13 @@ router.post('/', async (req, res) => {
     const device = await Device.create({
       serial, nombre, ownerType: 'user', ownerId: req.usuario.id
     });
+
+    await publicarSinFallar('device.registered', {
+      deviceId: device.id,
+      userId: req.usuario.id,
+      data: { serial: device.serial, nombre: device.nombre, ownerType: device.ownerType, ownerId: device.ownerId }
+    });
+
     res.status(201).json(device);
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
@@ -77,7 +97,19 @@ router.post('/:id/alerts', async (req, res) => {
     }
 
     const alert = await Alert.create({ deviceId: device.id, level, message });
-    res.status(202).json({ status: 'accepted', alertId: alert.id, deviceId: device.id });
+
+    const evento = await publicarSinFallar('device.alert.triggered', {
+      deviceId: device.id,
+      userId: req.usuario.id,
+      data: { alertId: alert.id, level, message }
+    });
+
+    res.status(202).json({
+      status: 'accepted',
+      alertId: alert.id,
+      deviceId: device.id,
+      eventId: evento ? evento.eventId : null
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
