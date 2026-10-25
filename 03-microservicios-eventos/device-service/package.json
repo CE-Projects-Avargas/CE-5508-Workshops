@@ -1,0 +1,19 @@
+{
+  "name": "ce5508-taller3-device-service",
+  "version": "1.0.0",
+  "description": "device-service del Taller 3 (CE5508), dispositivos con autorizacion por recurso",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jose": "^5.9.6",
+    "mysql2": "^3.10.1",
+    "sequelize": "^6.37.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
