@@ -15,6 +15,8 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      device-service:
+        condition: service_healthy
     networks: [borde, interna]
 
   # ===== DATOS: una base por servicio, cada una en su propia red =====
@@ -138,6 +140,33 @@ services:
       - ./auth-service:/app
       - auth_keys:/keys        # clave PRIVADA: se monta SOLO aqui
     networks: [interna, datos-auth]
+
+  device-service:
+    build: ./device-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: device-db
+      DB_PORT: 3306
+      DB_NAME: dispositivos
+      DB_USER: device_user
+      DB_PASSWORD: device_pass
+      PORT: 4100
+      JWKS_URL: http://auth-service:5001/auth/jwks   # por la red "interna"
+      JWT_ISSUER: ce5508-auth-service
+      JWT_AUDIENCE: ce5508-backend
+    healthcheck:                 # sano = responde en su puerto (wget viene en alpine)
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4100/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      device-db:
+        condition: service_healthy
+    volumes:
+      - ./device-service:/app
+      - /app/node_modules
+    networks: [interna, datos-device]
+    # Sin "ports": solo se llega por el gateway
 
   frontend:
     build: ./frontend
