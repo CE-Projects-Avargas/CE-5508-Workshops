@@ -2,11 +2,14 @@ require('dotenv').config();
 
 const express = require('express');
 const db = require('./db');
+const verificarToken = require('./auth');
+const deviceRoutes = require('./routes/devices');
 
 const app = express();
 const PORT = Number(process.env.PORT || 4003);
 
 app.use(express.json());
+app.use('/devices', verificarToken, deviceRoutes);
 
 // Endpoint temporal para comprobar que el servicio está activo.
 app.get('/health', async (req, res) => {
@@ -18,7 +21,7 @@ app.get('/health', async (req, res) => {
       service: 'device-service',
       database: 'connected'
     });
-    
+
   } catch (error) {
     console.error('Error al comprobar la conexión con MariaDB:', error.message);
 
