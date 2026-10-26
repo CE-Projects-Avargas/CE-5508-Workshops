@@ -12,7 +12,20 @@ let channel = null;
 let connectionPromise = null;
 
 /**
- * Obtiene un canal de RabbitMQ y declara el exchange de eventos.
+ * Invalida las referencias cuando una conexión o canal deja de ser válido.
+ */
+function invalidarConexion(conexionCerrada, canalCerrado) {
+  if (channel === canalCerrado) {
+    channel = null;
+  }
+
+  if (connection === conexionCerrada) {
+    connection = null;
+  }
+}
+
+/**
+ * Obtiene un canal de confirmación y declara el exchange.
  */
 async function getChannel() {
   if (channel) {
@@ -24,33 +37,63 @@ async function getChannel() {
   }
 
   connectionPromise = (async () => {
-    try {
-      connection = await amqp.connect(RABBITMQ_URL);
+    let nuevaConexion = null;
+    let nuevoCanal = null;
 
-      connection.on('error', (error) => {
-        console.error('Error en la conexión con RabbitMQ:', error.message);
+    try {
+      nuevaConexion = await amqp.connect(RABBITMQ_URL);
+
+      nuevaConexion.on('error', (error) => {
+        console.error(
+          'Error en la conexión con RabbitMQ:',
+          error.message
+        );
       });
 
-      connection.on('close', () => {
-        connection = null;
-        channel = null;
+      nuevaConexion.on('close', () => {
+        invalidarConexion(nuevaConexion, nuevoCanal);
         console.warn('La conexión con RabbitMQ se cerró');
       });
 
-      channel = await connection.createConfirmChannel();
+      nuevoCanal = await nuevaConexion.createConfirmChannel();
 
-      channel.on('error', (error) => {
-        console.error('Error en el canal de RabbitMQ:', error.message);
+      nuevoCanal.on('error', (error) => {
+        console.error(
+          'Error en el canal de RabbitMQ:',
+          error.message
+        );
       });
 
-      await channel.assertExchange(EVENTS_EXCHANGE, 'topic', {
+      nuevoCanal.on('close', () => {
+        invalidarConexion(nuevaConexion, nuevoCanal);
+        console.warn('El canal de RabbitMQ se cerró');
+      });
+
+      await nuevoCanal.assertExchange(EVENTS_EXCHANGE, 'topic', {
         durable: true
       });
 
-      return channel;
+      connection = nuevaConexion;
+      channel = nuevoCanal;
+
+      return nuevoCanal;
     } catch (error) {
-      connection = null;
-      channel = null;
+      if (nuevoCanal) {
+        try {
+          await nuevoCanal.close();
+        } catch (_) {
+          // El canal podría estar cerrado.
+        }
+      }
+
+      if (nuevaConexion) {
+        try {
+          await nuevaConexion.close();
+        } catch (_) {
+          // La conexión podría estar cerrada.
+        }
+      }
+
       throw error;
     } finally {
       connectionPromise = null;
@@ -61,33 +104,96 @@ async function getChannel() {
 }
 
 /**
- * Publica un evento persistente y espera la confirmación del broker.
+ * Publica un evento persistente, espera la confirmación del broker
+ * y detecta si RabbitMQ devuelve el mensaje por falta de destino.
  */
-async function publicarEvento(routingKey, evento) {
-  const canal = await getChannel();
+let colaPublicaciones = Promise.resolve();
 
-  const contenido = Buffer.from(JSON.stringify(evento));
+function publicarEvento(routingKey, evento) {
+  const publicar = async () => {
+    const canal = await getChannel();
+    const contenido = Buffer.from(JSON.stringify(evento));
 
-  await new Promise((resolve, reject) => {
-    canal.publish(
-      EVENTS_EXCHANGE,
-      routingKey,
-      contenido,
-      {
-        persistent: true,
-        contentType: 'application/json',
-        timestamp: Date.now(),
-        messageId: evento.eventId
-      },
-      (error) => {
-        if (error) {
-          return reject(error);
+    await new Promise((resolve, reject) => {
+      let finalizado = false;
+
+      const limpiar = () => {
+        canal.removeListener('return', manejarRetorno);
+        canal.removeListener('close', manejarCierre);
+      };
+
+      const terminar = (error) => {
+        if (finalizado) {
+          return;
         }
 
-        resolve();
+        finalizado = true;
+        limpiar();
+
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+
+      const manejarRetorno = (mensaje) => {
+        if (mensaje.properties.messageId !== evento.eventId) {
+          return;
+        }
+
+        terminar(
+          new Error(
+            `RabbitMQ devolvió el evento ${evento.eventId}: ` +
+            `${mensaje.fields.replyText || 'mensaje sin cola de destino'}`
+          )
+        );
+      };
+
+      const manejarCierre = () => {
+        terminar(
+          new Error(
+            'El canal de RabbitMQ se cerró durante la publicación'
+          )
+        );
+      };
+
+      canal.on('return', manejarRetorno);
+      canal.once('close', manejarCierre);
+
+      try {
+        canal.publish(
+          EVENTS_EXCHANGE,
+          routingKey,
+          contenido,
+          {
+            persistent: true,
+            mandatory: true,
+            contentType: 'application/json',
+            timestamp: Date.now(),
+            messageId: evento.eventId
+          },
+          (error) => {
+            if (error) {
+              terminar(error);
+              return;
+            }
+
+            terminar();
+          }
+        );
+      } catch (error) {
+        terminar(error);
       }
-    );
-  });
+    });
+  };
+
+  const resultado = colaPublicaciones.then(publicar);
+
+  // Un fallo no debe bloquear las publicaciones posteriores.
+  colaPublicaciones = resultado.catch(() => {});
+
+  return resultado;
 }
 
 module.exports = {

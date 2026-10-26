@@ -214,6 +214,9 @@ module.exports = async function verificarToken(req, res, next) {
       email: payload.email
     };
 
+    // Conserva el token para consultar recursos protegidos del backend.
+    req.token = token;
+
     return next();
   } catch (err) {
     const error =

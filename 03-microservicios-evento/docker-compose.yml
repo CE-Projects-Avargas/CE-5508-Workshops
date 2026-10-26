@@ -106,12 +106,15 @@ services:
       JWKS_URL: http://auth-service:4001/jwks
       RABBITMQ_URL: amqp://taller3:taller3-local-only@rabbitmq:5672
       EVENTS_EXCHANGE: ce5508.events
+      BACKEND_URL: http://backend:4000
     depends_on:
       device-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       auth-service:
+        condition: service_started
+      backend:
         condition: service_started
     networks:
       - interna

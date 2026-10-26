@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { publicarEvento } = require('../events');
 const { randomUUID } = require('crypto');
+const { usuarioTieneAccesoProyecto } = require('../proyectos');
 
 const router = express.Router();
 
@@ -59,25 +60,42 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // La autorización de proyectos se implementará en el paso 7.
-  if (ownerType === 'project') {
-    return res.status(403).json({
-      error: 'El registro de dispositivos para proyectos aún no está habilitado'
-    });
-  }
-
-  // Un usuario solo puede registrar dispositivos a su propio nombre.
-  if (propietarioId !== usuarioId) {
+  // Validar la autorización según el tipo de propietario.
+  if (ownerType === 'user' && propietarioId !== usuarioId) {
     return res.status(403).json({
       error: 'No puedes registrar dispositivos para otro usuario'
     });
+  }
+
+  if (ownerType === 'project') {
+    try {
+      const tieneAcceso = await usuarioTieneAccesoProyecto(
+        propietarioId,
+        req.token
+      );
+
+      if (!tieneAcceso) {
+        return res.status(403).json({
+          error: 'No tienes permiso para registrar dispositivos en este proyecto'
+        });
+      }
+    } catch (error) {
+      console.error(
+        'Error al verificar el acceso al proyecto:',
+        error.message
+      );
+
+      return res.status(503).json({
+        error: 'No se pudo verificar el acceso al proyecto'
+      });
+    }
   }
 
   try {
     const [resultado] = await db.execute(
       `INSERT INTO Devices (serial, nombre, ownerType, ownerId)
        VALUES (?, ?, ?, ?)`,
-      [serial.trim(), nombre.trim(), 'user', usuarioId]
+      [serial.trim(), nombre.trim(), ownerType, propietarioId]
     );
 
     const [dispositivos] = await db.execute(
@@ -168,18 +186,34 @@ router.get('/:id', async (req, res) => {
 
     const dispositivo = dispositivos[0];
 
-    // Hasta implementar la autorización de proyectos, estos dispositivos
-    // no se exponen mediante este endpoint.
-    if (dispositivo.ownerType === 'project') {
-      return res.status(403).json({
-        error: 'La autorización para dispositivos de proyectos aún no está habilitada'
-      });
-    }
+    if (dispositivo.ownerType === 'user') {
+      if (Number(dispositivo.ownerId) !== usuarioId) {
+        return res.status(403).json({
+          error: 'No tienes permiso para consultar este dispositivo'
+        });
+      }
+    } else if (dispositivo.ownerType === 'project') {
+      try {
+        const tieneAcceso = await usuarioTieneAccesoProyecto(
+          Number(dispositivo.ownerId),
+          req.token
+        );
 
-    if (Number(dispositivo.ownerId) !== usuarioId) {
-      return res.status(403).json({
-        error: 'No tienes permiso para consultar este dispositivo'
-      });
+        if (!tieneAcceso) {
+          return res.status(403).json({
+            error: 'No tienes permiso para consultar este dispositivo'
+          });
+        }
+      } catch (error) {
+        console.error(
+          'Error al verificar el acceso al proyecto:',
+          error.message
+        );
+
+        return res.status(503).json({
+          error: 'No se pudo verificar el acceso al proyecto'
+        });
+      }
     }
 
     return res.status(200).json(dispositivo);
@@ -236,18 +270,34 @@ router.post('/:id/alerts', async (req, res) => {
 
     const dispositivo = dispositivos[0];
 
-    // La autorización de dispositivos de proyectos se implementará
-    // en el paso 7.
-    if (dispositivo.ownerType === 'project') {
-      return res.status(403).json({
-        error: 'La autorización para dispositivos de proyectos aún no está habilitada'
-      });
-    }
+    if (dispositivo.ownerType === 'user') {
+      if (Number(dispositivo.ownerId) !== usuarioId) {
+        return res.status(403).json({
+          error: 'No tienes permiso para reportar alertas en este dispositivo'
+        });
+      }
+    } else if (dispositivo.ownerType === 'project') {
+      try {
+        const tieneAcceso = await usuarioTieneAccesoProyecto(
+          Number(dispositivo.ownerId),
+          req.token
+        );
 
-    if (Number(dispositivo.ownerId) !== usuarioId) {
-      return res.status(403).json({
-        error: 'No tienes permiso para reportar alertas en este dispositivo'
-      });
+        if (!tieneAcceso) {
+          return res.status(403).json({
+            error: 'No tienes permiso para reportar alertas en este dispositivo'
+          });
+        }
+      } catch (error) {
+        console.error(
+          'Error al verificar el acceso al proyecto:',
+          error.message
+        );
+
+        return res.status(503).json({
+          error: 'No se pudo verificar el acceso al proyecto'
+        });
+      }
     }
 
     const evento = {
