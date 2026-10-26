@@ -320,24 +320,25 @@ docker compose up --build
 
 Las bases y servicios se reconstruyeron correctamente sin pasos manuales adicionales.
 
-## Clave privada de autenticación
+## Gestión de claves JWT/JWKS
 
-La clave privada RSA utilizada por `auth-service` no se almacena en Git.
+`auth-service` genera automáticamente una clave RSA de 2048 bits cuando no existe ninguna.
 
-Debe existir localmente:
+Las claves se almacenan en el volumen Docker persistente `auth_keys_data`.
 
-```text
-secrets/private.pem
-```
-
-Ejemplo con OpenSSL:
+Para consultar las claves:
 
 ```bash
-mkdir -p secrets
-openssl genrsa -out secrets/private.pem 2048
+docker compose exec auth-service python jwt_keys.py list
 ```
 
-La clave se monta únicamente en `auth-service` y en modo lectura.
+Para rotar la clave activa:
+
+```bash
+docker compose exec auth-service python jwt_keys.py rotate
+```
+
+Las claves anteriores permanecen publicadas en JWKS para que los access tokens aún vigentes puedan seguir validándose.
 
 ## RabbitMQ Management
 
@@ -472,7 +473,9 @@ docker compose exec device-db mariadb -u device_user -pdevice123 device_db -e "S
 - `nack` con requeue ante errores temporales.
 - idempotencia mediante `eventId`.
 - comunicación entre contenedores por nombre de servicio Docker.
-- la clave privada de autenticación no se versiona.
+- las claves RSA de autenticación no se versionan y se almacenan en un volumen Docker persistente;
+- la primera clave RSA se genera automáticamente durante el arranque si el llavero está vacío;
+- la rotación utiliza un `kid` diferente por clave y JWKS conserva temporalmente las claves anteriores para validar access tokens vigentes.
 
 ## Herramientas utilizadas
 

@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS Proyectos (
   tipoDispositivo VARCHAR(255),
   criticidad ENUM('bajo', 'medio', 'alto', 'critico') NOT NULL DEFAULT 'medio',
   estado ENUM('planificacion', 'desarrollo', 'pruebas', 'produccion') NOT NULL DEFAULT 'planificacion',
-
-  ownerId INT, --identificador del usuario que creó el proyecto, para poder filtrar los proyectos por usuario
-
+-- identificador del usuario que creó el proyecto, para poder filtrar los proyectos por usuario
+  ownerId INT, 
+  
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

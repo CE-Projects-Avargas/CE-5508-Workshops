@@ -10,22 +10,10 @@ import hashlib
 from flask import Flask, request, jsonify
 from mysql.connector import IntegrityError, Error
 
-from jwt.algorithms import RSAAlgorithm
-from cryptography.hazmat.primitives import serialization
+from jwt_keys import (ensure_keyring,get_active_signing_key,get_public_jwks)
 
 
 auth = Flask(__name__)
-
-
-# Configuración de firma asimétrica de los access tokens.
-# Solo auth-service tiene acceso a la clave privada RSA.
-PRIVATE_KEY_PATH = os.getenv(
-    "JWT_PRIVATE_KEY_PATH",
-    "/run/secrets/auth_private.pem"
-)
-
-#Identifica la clave utilizada para permitir futuras rotaciones de claves sin invalidar los tokens existentes
-JWT_KID = "auth-rsa-2026-01"
 
 # Configuración de los tokens JWT
 JWT_ISSUER = "ce5508-auth"
@@ -35,24 +23,15 @@ JWT_AUDIENCE = "ce5508-backend"
 ACCESS_TOKEN_SECONDS = 900
 REFRESH_TOKEN_SECONDS = 28800
 
-
-# Carga la clave privada RSA montada únicamente en auth-service
-with open(PRIVATE_KEY_PATH, "rb") as archivo:
-    PRIVATE_KEY = serialization.load_pem_private_key(
-        archivo.read(),
-        password=None
-    )
-
-
-# Obtiene la clave pública correspondiente a la privada(se publica mediante JWKS)
-PUBLIC_KEY = PRIVATE_KEY.public_key()
-
-
+#crear la primer clave privada y pública si no existen, y cargar la clave privada en memoria
+ensure_keyring()
 
 # Genera un JWT firmado con la clave privada RSA
 def generar_access_token(usuario):
 
     ahora = datetime.now(timezone.utc)
+
+    kid, private_key = get_active_signing_key()
 
     token = jwt.encode(
         {
@@ -65,10 +44,10 @@ def generar_access_token(usuario):
                 seconds=ACCESS_TOKEN_SECONDS
             )
         },
-        PRIVATE_KEY,
+        private_key,
         algorithm="RS256",
         headers={
-            "kid": JWT_KID
+            "kid": kid
         }
     )
 
@@ -105,25 +84,10 @@ def health():
     }), 200
 
 
-# Expone la clave pública RSA para verificar los JWT
+# Publica todas las claves públicas vigentes para verificar los JWT.
 @auth.route("/jwks", methods=["GET"])
 def jwks():
-
-    clave_publica = RSAAlgorithm.to_jwk(
-        PUBLIC_KEY,
-        as_dict=True
-    )
-
-    #Añade los metadatos necesarios para identificar el uso y el algoritmo de la clave pública
-    clave_publica["kid"] = JWT_KID
-    clave_publica["use"] = "sig"
-    clave_publica["alg"] = "RS256"
-
-    return jsonify({
-        "keys": [
-            clave_publica
-        ]
-    }), 200
+    return jsonify(get_public_jwks()), 200
 
 #Registra un usuario nuevo en auth-db
 @auth.route("/register", methods=["POST"])
@@ -253,28 +217,8 @@ def login():
             return jsonify({
                 "error": "Credenciales incorrectas"
             }), 401
-        #Si las credenciales son correctas, se genera un token JWT con la información del usuario y una fecha de expiración de 5 segundos
-        
-        
-        # Genera un access token firmado con la clave privada RSA
-        ahora = datetime.now(timezone.utc)
-
-        token = jwt.encode(
-            {
-                "sub": str(usuario["id"]),
-                "email": usuario["email"],
-                "iss": JWT_ISSUER,
-                "aud": JWT_AUDIENCE,
-                "iat": ahora,
-                "exp": ahora + timedelta(seconds=ACCESS_TOKEN_SECONDS)
-            },
-            PRIVATE_KEY,
-            algorithm="RS256",
-            headers={
-                "kid": JWT_KID
-            }
-        )
-                # Genera las dos credenciales después de validar el login.
+       
+        # Genera las dos credenciales después de validar el login.
         access_token = generar_access_token(usuario)
 
         refresh_token, token_hash = generar_refresh_token()
@@ -305,16 +249,6 @@ def login():
             "accessToken": access_token,
             "refreshToken": refresh_token,
             "expiresIn": ACCESS_TOKEN_SECONDS,
-            "usuario": {
-                "id": usuario["id"],
-                "nombre": usuario["nombre"],
-                "email": usuario["email"]
-            }
-        }), 200
-
-        return jsonify({
-            "mensaje": "Login correcto",
-            "token": token,
             "usuario": {
                 "id": usuario["id"],
                 "nombre": usuario["nombre"],

@@ -8,7 +8,7 @@ router.get('/', async (req, res) => {
   try {
     const proyectos = await Proyecto.findAll({
       where: {
-        usuarioId: req.usuario.id
+        ownerId: req.usuario.id
       },
       order: [['createdAt', 'DESC']]
     });
@@ -30,7 +30,7 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    if (proyecto.usuarioId !== Number(req.usuario.id)) {
+    if (proyecto.ownerId !== Number(req.usuario.id)) {
       return res.status(403).json({
         error: 'No tiene permiso para acceder a este proyecto'
       });
@@ -49,7 +49,7 @@ router.post('/', async (req, res) => {
     
     const proyecto = await Proyecto.create({
       ...req.body,
-      usuarioId: req.usuario.id
+      ownerId: req.usuario.id
     });
 
     res.status(201).json(proyecto);

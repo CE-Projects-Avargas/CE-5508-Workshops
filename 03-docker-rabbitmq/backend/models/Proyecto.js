@@ -27,7 +27,7 @@ const Proyecto = sequelize.define('Proyecto', {
     type: DataTypes.ENUM('planificacion', 'desarrollo', 'pruebas', 'produccion'),
     defaultValue: 'planificacion'
   },
-  usuarioId: {
+  ownerId: {
     type: DataTypes.INTEGER,
     allowNull: false
   }
