@@ -90,16 +90,16 @@ router.post('/', async (req, res) => {
     const dispositivo = dispositivos[0];
 
     const evento = {
-    eventId: randomUUID(),
-    eventType: 'device.registered',
-    occurredAt: new Date().toISOString(),
-    data: {
+        eventId: randomUUID(),
+        type: 'device.registered',
+        occurredAt: new Date().toISOString(),
         deviceId: dispositivo.id,
-        serial: dispositivo.serial,
-        nombre: dispositivo.nombre,
         ownerType: dispositivo.ownerType,
-        ownerId: dispositivo.ownerId
-    }
+        ownerId: dispositivo.ownerId,
+        data: {
+            serial: dispositivo.serial,
+            nombre: dispositivo.nombre
+        }
     };
 
     try {
