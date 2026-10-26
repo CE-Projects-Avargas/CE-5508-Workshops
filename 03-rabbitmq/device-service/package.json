@@ -1,0 +1,16 @@
+{
+  "name": "ce5508-device-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "amqplib": "^2.2.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "mysql2": "^3.10.1"
+  }
+}

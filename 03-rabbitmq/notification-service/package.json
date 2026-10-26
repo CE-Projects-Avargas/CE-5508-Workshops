@@ -1,0 +1,12 @@
+{
+  "name": "ce5508-notification-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "amqplib": "^2.2.0",
+    "mysql2": "^3.10.1"
+  }
+}

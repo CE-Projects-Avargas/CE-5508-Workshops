@@ -1,0 +1,290 @@
+# Taller 3 — Persona 1: dispositivos, base propia y seguridad JWT/JWKS.
+name: ce5508-taller3
+services:
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+    - 8080:8080
+    volumes:
+    - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    - ./gateway/cors.conf:/etc/nginx/cors.conf:ro
+    depends_on:
+    - backend
+    - pump-service
+    - auth-service
+    - device-service
+    networks:
+    - borde
+    - interna
+  auth-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+    - auth_data:/var/lib/mysql
+    - ./database/init/auth:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+      - CMD
+      - healthcheck.sh
+      - --connect
+      - --innodb_initialized
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+    - datos-auth
+  operacion-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+    - operacion_data:/var/lib/mysql
+    - ./database/init/operacion:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+      - CMD
+      - healthcheck.sh
+      - --connect
+      - --innodb_initialized
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+    - datos-operacion
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_NAME: operacion
+      DB_USER: backend_user
+      DB_PASSWORD: backend_pass
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
+      JWKS_CACHE_TTL_MS: 300000
+      JWKS_CACHE_MAX_ENTRIES: 5
+      JWKS_REQUESTS_PER_MINUTE: 10
+      PORT: 4000
+    ports:
+    - 4000:4000
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    networks:
+    - interna
+    - datos-operacion
+  auth-service:
+    build: ./auth-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: auth-db
+      DB_NAME: autenticacion
+      DB_USER: auth_user
+      DB_PASSWORD: auth_pass
+      PORT: 4001
+      KEYS_DIR: /keys
+    volumes:
+    - auth_keys:/keys
+    ports:
+    - 4001:4001
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+    - interna
+    - datos-auth
+  pump-service:
+    build: ./pump-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: operacion-db
+      DB_NAME: operacion
+      DB_USER: pump_user
+      DB_PASSWORD: pump_pass
+      BACKEND_URL: http://backend:4000
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
+      JWKS_CACHE_TTL_MS: 300000
+      JWKS_CACHE_MAX_ENTRIES: 5
+      JWKS_REQUESTS_PER_MINUTE: 10
+      PORT: 4002
+    ports:
+    - 4002:4002
+    depends_on:
+      operacion-db:
+        condition: service_healthy
+    volumes:
+    - ./pump-service:/app
+    - /app/node_modules
+    networks:
+    - interna
+    - datos-operacion
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+    ports:
+    - 5173:5173
+    depends_on:
+    - gateway
+    networks:
+    - borde
+  device-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+    - device_data:/var/lib/mysql
+    - ./database/init/device:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+      - CMD
+      - healthcheck.sh
+      - --connect
+      - --innodb_initialized
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+    - datos-device
+  notification-service:
+    build: ./notification-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: notification-db
+      DB_NAME: notifications
+      DB_USER: notification_user
+      DB_PASSWORD: notification_pass
+
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: taller3
+      RABBITMQ_PASSWORD: taller3_pass
+      RABBITMQ_EXCHANGE: device.events
+      RABBITMQ_ALERT_QUEUE: alerts.queue
+
+    depends_on:
+      notification-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+    networks:
+      - interna
+      - datos-notification
+  notification-db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root123
+    volumes:
+      - notification_data:/var/lib/mysql
+      - ./database/init/notification:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - datos-notification
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    restart: unless-stopped
+
+    # Crea un usuario inicial y luego device.service utiliza esas mismas credenciales para conectarse a RabbitMQ.
+    environment:
+      # no importa cuantas veces Docker destruya y recree el contenedor RabbitMQ siempre se identificará como rabbit@rabbitmq
+      RABBITMQ_NODENAME: rabbit@rabbitmq 
+      RABBITMQ_DEFAULT_USER: taller3
+      RABBITMQ_DEFAULT_PASS: taller3_pass
+
+    # Puertos
+    ports:
+        # Puerto del protocolo AMQP (Advanced Message Queuing Protocol) para la comunicación entre servicios.
+        #Dentro de Docker no usamos loccalhost, usamos rabbitmq como hostname para conectarnos a este servicio de Compose
+      - "5672:5672"
+        # Puerto para nosotros, no se usa para publicar eventos, sino para acceder a la interfaz de administración web de RabbitMQ
+      - "15672:15672"
+
+    # Volumen para persistir los datos de RabbitMQ, de modo que si el contenedor se reinicia, los datos no se pierdan
+    # Cumple con el concepto de persistencia 
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    # Permite que el Docker Compose espere a que RabbitMQ esté listo antes de iniciar 
+    # otros servicios que dependan de él, como device-service.
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+    # RabbitMQ no necesita conectarse a ninguna base de datos, su trabajo es solamente de mensajería
+    networks:
+      - interna
+
+  device-service:
+    build: ./device-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: device-db
+      DB_NAME: devices
+      DB_USER: device_user
+      DB_PASSWORD: device_pass
+      PORT: 4003
+      BACKEND_URL: http://backend:4000
+      AUTH_JWKS_URL: http://auth-service:4001/auth/jwks
+      JWT_ISS: auth-service
+      JWT_AUD: ce5508-taller2
+
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: taller3
+      RABBITMQ_PASSWORD: taller3_pass
+      RABBITMQ_EXCHANGE: device.events
+      RABBITMQ_REGISTRATION_QUEUE: registrations.queue
+      RABBITMQ_ALERT_QUEUE: alerts.queue
+
+      DEVICE_EVENT_PUBLISHER_MODULE: ./publisher.js
+
+    depends_on:
+      device-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      backend:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+    - interna
+    - datos-device
+networks:
+  borde: null
+  interna: null
+  datos-auth: null
+  datos-operacion: null
+  datos-device: null
+  datos-notification: null
+volumes:
+  auth_data: null
+  operacion_data: null
+  auth_keys: null
+  device_data: null
+  rabbitmq_data: null
+  notification_data: null
