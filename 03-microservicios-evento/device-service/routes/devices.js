@@ -192,4 +192,96 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/alerts', async (req, res) => {
+  const dispositivoId = enteroPositivo(req.params.id);
+  const usuarioId = enteroPositivo(req.usuario.id);
+  const { level, message } = req.body;
+
+  if (dispositivoId === null) {
+    return res.status(400).json({
+      error: 'El identificador del dispositivo no es válido'
+    });
+  }
+
+  if (usuarioId === null) {
+    return res.status(401).json({
+      error: 'El usuario autenticado no tiene un identificador válido'
+    });
+  }
+
+  if (
+    typeof level !== 'string' ||
+    !level.trim() ||
+    typeof message !== 'string' ||
+    !message.trim()
+  ) {
+    return res.status(400).json({
+      error: 'Los campos level y message son obligatorios'
+    });
+  }
+
+  try {
+    const [dispositivos] = await db.execute(
+      `SELECT id, serial, nombre, ownerType, ownerId
+       FROM Devices
+       WHERE id = ?`,
+      [dispositivoId]
+    );
+
+    if (dispositivos.length === 0) {
+      return res.status(404).json({
+        error: 'Dispositivo no encontrado'
+      });
+    }
+
+    const dispositivo = dispositivos[0];
+
+    // La autorización de dispositivos de proyectos se implementará
+    // en el paso 7.
+    if (dispositivo.ownerType === 'project') {
+      return res.status(403).json({
+        error: 'La autorización para dispositivos de proyectos aún no está habilitada'
+      });
+    }
+
+    if (Number(dispositivo.ownerId) !== usuarioId) {
+      return res.status(403).json({
+        error: 'No tienes permiso para reportar alertas en este dispositivo'
+      });
+    }
+
+    const evento = {
+      eventId: randomUUID(),
+      type: 'device.alert.triggered',
+      occurredAt: new Date().toISOString(),
+      deviceId: dispositivo.id,
+      ownerType: dispositivo.ownerType,
+      ownerId: dispositivo.ownerId,
+      userId: usuarioId,
+      data: {
+        serial: dispositivo.serial,
+        nombre: dispositivo.nombre,
+        level: level.trim(),
+        message: message.trim()
+      }
+    };
+
+    await publicarEvento('device.alert.triggered', evento);
+
+    return res.status(202).json({
+      message: 'Alerta aceptada para procesamiento',
+      eventId: evento.eventId
+    });
+  } catch (error) {
+    console.error(
+      'Error al procesar la alerta del dispositivo:',
+      error.message
+    );
+
+    return res.status(503).json({
+      error: 'No se pudo publicar la alerta'
+    });
+  }
+});
+
 module.exports = router;
