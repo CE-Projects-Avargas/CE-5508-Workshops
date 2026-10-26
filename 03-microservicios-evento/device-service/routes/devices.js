@@ -1,5 +1,7 @@
 const express = require('express');
 const db = require('../db');
+const { publicarEvento } = require('../events');
+const { randomUUID } = require('crypto');
 
 const router = express.Router();
 
@@ -79,13 +81,42 @@ router.post('/', async (req, res) => {
     );
 
     const [dispositivos] = await db.execute(
-      `SELECT id, serial, nombre, ownerType, ownerId, createdAt, updatedAt
-       FROM Devices
-       WHERE id = ?`,
-      [resultado.insertId]
+        `SELECT id, serial, nombre, ownerType, ownerId, createdAt, updatedAt
+        FROM Devices
+        WHERE id = ?`,
+        [resultado.insertId]
     );
 
-    return res.status(201).json(dispositivos[0]);
+    const dispositivo = dispositivos[0];
+
+    const evento = {
+    eventId: randomUUID(),
+    eventType: 'device.registered',
+    occurredAt: new Date().toISOString(),
+    data: {
+        deviceId: dispositivo.id,
+        serial: dispositivo.serial,
+        nombre: dispositivo.nombre,
+        ownerType: dispositivo.ownerType,
+        ownerId: dispositivo.ownerId
+    }
+    };
+
+    try {
+    await publicarEvento('device.registered', evento);
+    } catch (error) {
+    console.error(
+        'El dispositivo se registró, pero no se pudo publicar el evento:',
+        error.message
+    );
+
+    return res.status(503).json({
+        error: 'El dispositivo se registró, pero no se pudo confirmar la publicación del evento',
+        deviceId: dispositivo.id
+    });
+    }
+
+    return res.status(201).json(dispositivo);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({

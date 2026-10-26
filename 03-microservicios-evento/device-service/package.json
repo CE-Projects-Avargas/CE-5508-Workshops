@@ -8,9 +8,10 @@
         "start": "node index.js"
     },
     "dependencies": {
-        "express": "4.19.2",
-        "mysql2": "3.11.3",
+        "amqplib": "^0.10.4",
         "dotenv": "16.4.5",
-        "jsonwebtoken": "9.0.2"
+        "express": "4.19.2",
+        "jsonwebtoken": "9.0.2",
+        "mysql2": "3.11.3"
     }
 }
