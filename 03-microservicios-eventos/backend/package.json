@@ -1,7 +1,7 @@
 {
   "name": "ce5508-taller-backend",
   "version": "1.0.0",
-  "description": "Backend del Taller 2 (CE5508) - proyectos de dispositivos medicos, valida JWT con JWKS",
+  "description": "Backend del Taller 3 (CE5508) - proyectos de dispositivos medicos, valida JWT con JWKS",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

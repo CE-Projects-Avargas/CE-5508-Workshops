@@ -1,4 +1,4 @@
-"""auth-service: la UNICA oficina que emite carnets (CE5508, Taller 2).
+"""auth-service: la UNICA oficina que emite carnets (CE5508, Taller 3).
 
 Rutas (el gateway las publica como /api/auth/*):
     POST /auth/register  {email, password, nombre} -> 201, o 409 si el correo existe

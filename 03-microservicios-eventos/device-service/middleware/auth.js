@@ -1,4 +1,4 @@
-// Defensa en profundidad: backend verifica el token POR SU CUENTA,
+// Defensa en profundidad: device-service verifica el token POR SU CUENTA,
 // aunque la peticion no haya pasado por el gateway.
 //
 // - Sin secreto compartido: se verifica con la clave PUBLICA de auth-service,

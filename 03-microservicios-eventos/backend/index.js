@@ -8,7 +8,7 @@ const app = express();
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller 2 (JWKS)' });
+  res.json({ status: 'ok', servicio: 'CE5508 - Backend Taller 3' });
 });
 
 // Todo /proyectos exige un JWT valido de auth-service, se llegue por el

@@ -138,16 +138,24 @@ function validar(evento) {
     return 'deviceId y userId deben ser enteros';
   }
   if (Number.isNaN(Date.parse(evento.occurredAt))) return 'occurredAt no es una fecha';
+  // El dueno es opcional, pero si viene tiene que tener sentido.
+  if (evento.ownerType !== undefined && !['user', 'project'].includes(evento.ownerType)) {
+    return 'ownerType debe ser user o project';
+  }
+  if (evento.ownerId !== undefined && !Number.isInteger(evento.ownerId)) {
+    return 'ownerId debe ser entero';
+  }
   return null;
 }
 
 function textoDe(evento) {
   const d = evento.data || {};
+  const delProyecto = evento.ownerType === 'project' ? ` del proyecto ${evento.ownerId}` : '';
   switch (evento.type) {
     case 'device.registered':
-      return `Se registro el dispositivo "${d.nombre}" (serial ${d.serial})`;
+      return `Se registro el dispositivo "${d.nombre}" (serial ${d.serial})${delProyecto}`;
     case 'device.alert.triggered':
-      return `Alerta ${d.level} en el dispositivo ${evento.deviceId}: ${d.message}`;
+      return `Alerta ${d.level} en el dispositivo ${evento.deviceId}${delProyecto}: ${d.message}`;
     default:
       return `Evento ${evento.type} del dispositivo ${evento.deviceId}`;
   }
@@ -163,6 +171,8 @@ async function registrar(evento, payload) {
       type: evento.type,
       deviceId: evento.deviceId,
       userId: evento.userId,
+      ownerType: evento.ownerType ?? null,
+      ownerId: evento.ownerId ?? null,
       mensaje: textoDe(evento).slice(0, 700),
       payload,
       occurredAt: evento.occurredAt

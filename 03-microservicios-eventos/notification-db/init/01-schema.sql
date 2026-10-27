@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS Notificaciones (
   eventId CHAR(36) NOT NULL UNIQUE,
   type VARCHAR(100) NOT NULL,
   deviceId INT NOT NULL,
-  userId INT NOT NULL,              -- referencia al usuario (sin FK: vive en auth-db)
+  userId INT NOT NULL,              -- quien hizo la accion (sin FK: vive en auth-db)
+  ownerType ENUM('user', 'project'),  -- dueno del dispositivo: un usuario...
+  ownerId INT,                      -- ...o un proyecto (sin FK: vive en backend-db)
   mensaje VARCHAR(700) NOT NULL,    -- texto legible de la notificacion
   payload TEXT NOT NULL,            -- el evento tal cual llego, para auditoria
   occurredAt DATETIME(3) NOT NULL,  -- cuando ocurrio (lo dice el productor)

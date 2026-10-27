@@ -47,3 +47,20 @@ export function listarProyectos() {
 export function eliminarProyecto(id) {
   return pedirConToken(`/proyectos/${id}`, { method: 'DELETE' });
 }
+
+// --- Dispositivos (device-service, por la misma puerta) ----------------------
+export function listarDispositivos() {
+  return pedirConToken('/devices');
+}
+
+export function registrarDispositivo(datos) {
+  return pedirConToken('/devices', { method: 'POST', body: JSON.stringify(datos) });
+}
+
+export function consultarDispositivo(id) {
+  return pedirConToken(`/devices/${id}`);
+}
+
+export function reportarAlerta(id, datos) {
+  return pedirConToken(`/devices/${id}/alerts`, { method: 'POST', body: JSON.stringify(datos) });
+}

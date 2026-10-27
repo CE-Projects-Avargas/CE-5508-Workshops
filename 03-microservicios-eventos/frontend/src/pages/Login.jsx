@@ -3,7 +3,7 @@ import { login, registrar } from '../auth.js';
 
 const ESTADO_INICIAL = { email: '', password: '', nombre: '' };
 
-// Pantalla de login/registro. Habla con el auth-service (puerto 5001).
+// Pantalla de login/registro. Habla con auth-service a traves del gateway (/api/auth/*).
 export default function Login({ onAutenticado }) {
   const [modo, setModo] = useState('login'); // 'login' | 'registro'
   const [form, setForm] = useState(ESTADO_INICIAL);

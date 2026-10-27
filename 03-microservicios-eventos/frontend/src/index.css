@@ -95,6 +95,24 @@ button:disabled {
   color: #94a3b8;
 }
 
+.pestanas {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.pestanas button {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+}
+
+.pestanas button.activa {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
 .link-button {
   background: none;
   border: none;
