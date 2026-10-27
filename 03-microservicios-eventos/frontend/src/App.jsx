@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import Login from './pages/Login.jsx';
 import NuevoProyecto from './pages/NuevoProyecto.jsx';
+import Dispositivos from './pages/Dispositivos.jsx';
 import { cerrarSesion, guardarSesion, leerSesion, logout, verificarSesion } from './auth.js';
 
 export default function App() {
   const [usuario, setUsuario] = useState(() => leerSesion()?.usuario || null);
   const [verificando, setVerificando] = useState(true);
+  const [pagina, setPagina] = useState('proyectos'); // 'proyectos' | 'dispositivos'
 
   // Al cargar, valida el access guardado contra auth-service (/api/auth/me).
   // Si venció intenta renovarlo con el refresh; si tampoco sirve, vuelve al login.
@@ -57,7 +59,23 @@ export default function App() {
           Cerrar sesión
         </button>
       </div>
-      <NuevoProyecto usuario={usuario} />
+      <div className="pestanas">
+        <button
+          type="button"
+          className={pagina === 'proyectos' ? 'activa' : ''}
+          onClick={() => setPagina('proyectos')}
+        >
+          Proyectos
+        </button>
+        <button
+          type="button"
+          className={pagina === 'dispositivos' ? 'activa' : ''}
+          onClick={() => setPagina('dispositivos')}
+        >
+          Dispositivos
+        </button>
+      </div>
+      {pagina === 'proyectos' ? <NuevoProyecto usuario={usuario} /> : <Dispositivos usuario={usuario} />}
     </main>
   );
 }
