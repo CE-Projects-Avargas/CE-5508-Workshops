@@ -12,9 +12,13 @@ CE-5508-Workshops/
 │   ├── README.md       vista general y cómo levantarlo
 │   └── docs/           guía completa (docker-login.md)
 │
-└── 02-id-gateway/      Taller 2 — puerta única, bases separadas y JWKS
+├── 02-id-gateway/      Taller 2 — puerta única, bases separadas y JWKS
+│   ├── README.md       vista general y cómo levantarlo
+│   └── docs/           guía completa (id-gateway.md)
+│
+└── 03-microservicios-eventos/   Taller 3 — dispositivos, RabbitMQ y consumidor de eventos
     ├── README.md       vista general y cómo levantarlo
-    └── docs/           guía completa (id-gateway.md)
+    └── docs/           guía completa (microservicios-eventos.md)
 ```
 
 ## Talleres
@@ -23,6 +27,7 @@ CE-5508-Workshops/
 |---|---|
 | [`01-docker-login`](01-docker-login/) | Docker + Docker Compose, API REST con Node/Express/Sequelize, servicio de autenticación en Python/Flask, MariaDB, sesiones con JWT. Completo. |
 | [`02-id-gateway`](02-id-gateway/) | Gateway nginx como única puerta (`:8080`), una base de datos por servicio en redes separadas, firma asimétrica RS256 con JWKS y rotación de claves, access de 15 min con refresh rotado, y validación independiente en el backend. Completo. |
+| [`03-microservicios-eventos`](03-microservicios-eventos/) | `device-service` con su propia base y autorización por recurso (dispositivos de un usuario o de un proyecto), eventos `device.registered` y `device.alert.triggered` en RabbitMQ, y `notification-service` como consumidor independiente con ack manual, idempotencia por `eventId`, reintentos y DLQ. Todo local con Docker Compose. Completo. |
 
 ## Cómo usar este repositorio
 
