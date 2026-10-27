@@ -257,6 +257,7 @@ else
   falla "preflight CORS de /api/devices resuelto en la puerta" "$(echo "$PREFLIGHT" | head -1)"
 fi
 igual "auth-service no esta expuesto al host (:5001)" "000" "$(codigo -m 3 http://localhost:5001/)"
+igual "backend no esta expuesto al host (:4000): solo se entra por la puerta" "000" "$(codigo -m 3 http://localhost:4000/)"
 
 # ---------------------------------------------------------------------------
 echo

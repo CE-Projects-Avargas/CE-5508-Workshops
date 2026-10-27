@@ -117,8 +117,6 @@ services:
       JWKS_URL: http://auth-service:5001/auth/jwks   # por la red "interna"
       JWT_ISSUER: ce5508-auth-service
       JWT_AUDIENCE: ce5508-backend
-    ports:
-      - "4000:4000"   # expuesto A PROPOSITO para probar el Req 4 (saltarse la puerta)
     healthcheck:                 # sano = responde en su puerto (wget viene en alpine)
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4000/"]
       interval: 5s
@@ -131,6 +129,7 @@ services:
       - ./backend:/app
       - /app/node_modules
     networks: [interna, datos-backend]
+    # Sin "ports": solo se llega por el gateway (o desde device-service)
 
   auth-service:
     build: ./auth-service

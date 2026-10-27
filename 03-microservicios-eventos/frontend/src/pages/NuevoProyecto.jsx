@@ -9,7 +9,7 @@ const ESTADO_INICIAL = {
 // Consume el backend a traves del gateway (una sola URL) con el access token.
 // "Eliminar" solo se muestra en los proyectos propios. Es cortesia de interfaz,
 // no seguridad: el backend responde 403 igual si alguien llama al DELETE por su
-// cuenta (ver el Requisito 4 en docs/id-gateway.md).
+// cuenta, porque verifica el token y el dueno en cada peticion.
 export default function NuevoProyecto({ usuario }) {
   const [form, setForm] = useState(ESTADO_INICIAL);
   const [proyectos, setProyectos] = useState([]);
