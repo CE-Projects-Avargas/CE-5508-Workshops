@@ -14,6 +14,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /proyectos/:id - un proyecto, 404 si no existe.
+// device-service lo usa para saber quien es el dueno de un proyecto.
+router.get('/:id', async (req, res) => {
+  try {
+    const proyecto = await Proyecto.findByPk(req.params.id);
+    if (!proyecto) return res.status(404).json({ error: 'proyecto no encontrado' });
+    res.json(proyecto);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /proyectos - el dueno sale del TOKEN, no del body.
 router.post('/', async (req, res) => {
   try {
