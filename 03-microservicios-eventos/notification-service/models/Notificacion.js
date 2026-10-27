@@ -6,6 +6,8 @@ const Notificacion = sequelize.define('Notificacion', {
   type: { type: DataTypes.STRING(100), allowNull: false },
   deviceId: { type: DataTypes.INTEGER, allowNull: false },
   userId: { type: DataTypes.INTEGER, allowNull: false },
+  ownerType: { type: DataTypes.ENUM('user', 'project'), allowNull: true },
+  ownerId: { type: DataTypes.INTEGER, allowNull: true },
   mensaje: { type: DataTypes.STRING(700), allowNull: false },
   payload: { type: DataTypes.TEXT, allowNull: false },
   occurredAt: { type: DataTypes.DATE(3), allowNull: false }

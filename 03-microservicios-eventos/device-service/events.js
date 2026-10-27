@@ -49,9 +49,11 @@ async function conectar() {
 }
 
 // Publica un evento con el formato acordado:
-//   { eventId, type, occurredAt, deviceId, userId, data }
+//   { eventId, type, occurredAt, deviceId, userId, ownerType, ownerId, data }
+// userId es quien hizo la accion; ownerType + ownerId, el dueno del
+// dispositivo (un usuario o un proyecto).
 // Resuelve cuando RabbitMQ confirma que lo recibio.
-async function publicarEvento(type, { deviceId, userId, data }) {
+async function publicarEvento(type, { deviceId, userId, ownerType, ownerId, data }) {
   if (!canal) throw new Error('RabbitMQ no disponible');
 
   const evento = {
@@ -60,6 +62,8 @@ async function publicarEvento(type, { deviceId, userId, data }) {
     occurredAt: new Date().toISOString(),
     deviceId,
     userId,
+    ownerType,
+    ownerId,
     data
   };
 
