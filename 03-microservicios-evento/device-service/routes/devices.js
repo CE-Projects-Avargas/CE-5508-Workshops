@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { publicarEvento } = require('../events');
+const { encolarEvento, publicarPendientes } = require('../outbox');
 const { randomUUID } = require('crypto');
 const { usuarioTieneAccesoProyecto } = require('../proyectos');
 
@@ -91,51 +91,50 @@ router.post('/', async (req, res) => {
     }
   }
 
+  // El dispositivo y su evento se guardan en la misma transaccion (outbox): quedan los dos o ninguno
+  let conexion;
   try {
-    const [resultado] = await db.execute(
+    conexion = await db.getConnection();
+    await conexion.beginTransaction();
+
+    const [resultado] = await conexion.execute(
       `INSERT INTO Devices (serial, nombre, ownerType, ownerId)
        VALUES (?, ?, ?, ?)`,
       [serial.trim(), nombre.trim(), ownerType, propietarioId]
     );
 
-    const [dispositivos] = await db.execute(
-        `SELECT id, serial, nombre, ownerType, ownerId, createdAt, updatedAt
-        FROM Devices
-        WHERE id = ?`,
-        [resultado.insertId]
+    const [dispositivos] = await conexion.execute(
+      `SELECT id, serial, nombre, ownerType, ownerId, createdAt, updatedAt
+       FROM Devices
+       WHERE id = ?`,
+      [resultado.insertId]
     );
 
     const dispositivo = dispositivos[0];
 
-    const evento = {
-        eventId: randomUUID(),
-        type: 'device.registered',
-        occurredAt: new Date().toISOString(),
-        deviceId: dispositivo.id,
-        ownerType: dispositivo.ownerType,
-        ownerId: dispositivo.ownerId,
-        data: {
-            serial: dispositivo.serial,
-            nombre: dispositivo.nombre
-        }
-    };
-
-    try {
-    await publicarEvento('device.registered', evento);
-    } catch (error) {
-    console.error(
-        'El dispositivo se registró, pero no se pudo publicar el evento:',
-        error.message
-    );
-
-    return res.status(503).json({
-        error: 'El dispositivo se registró, pero no se pudo confirmar la publicación del evento',
-        deviceId: dispositivo.id
+    await encolarEvento(conexion, {
+      eventId: randomUUID(),
+      type: 'device.registered',
+      occurredAt: new Date().toISOString(),
+      deviceId: dispositivo.id,
+      ownerType: dispositivo.ownerType,
+      ownerId: dispositivo.ownerId,
+      userId: usuarioId,
+      data: {
+        serial: dispositivo.serial,
+        nombre: dispositivo.nombre
+      }
     });
-    }
+
+    await conexion.commit();
+
+    // No se espera: el evento ya esta guardado y la outbox lo publica aunque RabbitMQ falle ahora
+    publicarPendientes();
 
     return res.status(201).json(dispositivo);
   } catch (error) {
+    if (conexion) await conexion.rollback().catch(() => {});
+
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({
         error: 'Ya existe un dispositivo con ese serial'
@@ -147,6 +146,8 @@ router.post('/', async (req, res) => {
     return res.status(500).json({
       error: 'No se pudo registrar el dispositivo'
     });
+  } finally {
+    if (conexion) conexion.release();
   }
 });
 
@@ -316,7 +317,8 @@ router.post('/:id/alerts', async (req, res) => {
       }
     };
 
-    await publicarEvento('device.alert.triggered', evento);
+    await encolarEvento(db, evento);
+    publicarPendientes();
 
     return res.status(202).json({
       message: 'Alerta aceptada para procesamiento',
@@ -329,7 +331,7 @@ router.post('/:id/alerts', async (req, res) => {
     );
 
     return res.status(503).json({
-      error: 'No se pudo publicar la alerta'
+      error: 'No se pudo registrar la alerta'
     });
   }
 });

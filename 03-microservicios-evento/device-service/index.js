@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('./db');
 const verificarToken = require('./auth');
 const deviceRoutes = require('./routes/devices');
+const { iniciarOutbox } = require('./outbox');
 
 const app = express();
 const PORT = Number(process.env.PORT || 4003);
@@ -40,6 +41,7 @@ async function startServer() {
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`device-service escuchando en el puerto ${PORT}`);
+      iniciarOutbox();
     });
   } catch (error) {
     console.error('No se pudo conectar con la base de datos:', error.message);
