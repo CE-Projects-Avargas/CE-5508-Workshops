@@ -1,0 +1,14 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Consumidor de eventos de dispositivos: registra una notificacion por evento",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "mysql2": "3.11.3"
+  }
+}
