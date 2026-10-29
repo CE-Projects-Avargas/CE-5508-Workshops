@@ -15,6 +15,7 @@ Cada carpeta es un taller independiente: trae su propio `README.md` con instrucc
 |---|---|
 | [`01-docker-login`](01-docker-login/) | Docker + Docker Compose, API REST con Node/Express/Sequelize, MariaDB, autenticación con JWT |
 | [`02-gateway`](02-gateway/) | Identidad y la puerta de entrada |
+| [`03-microservicios-evento`](03-microservicios-evento/) | Microservicios y eventos con RabbitMQ para monitoreo de dispositivos médicos |
 
 ## Cómo usar este repositorio
 
